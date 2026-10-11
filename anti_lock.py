@@ -3,8 +3,7 @@
 """
 Anti-detect / anti-lock module cho jieqi-core.
 
-Mục tiêu: giảm khả năng bot bị phát hiện và bị khóa tài khoản Facebook
-khi thực hiện các thao tác claim / transfer.
+
 
 Cấu trúc:
     A) Fingerprint theo tài khoản (ổn định + có version để rotate)
