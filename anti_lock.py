@@ -3,13 +3,32 @@
 """
 Anti-detect / anti-lock module cho jieqi-core.
 
-BẢN ĐẦY ĐỦ — v3
-- Giữ API gốc (backward-compat): check_daily_quota(), record_claim(),
-  record_transfer(), detect_soft_ban(), human_delay(), v.v.
-- Kèm cải tiến: fingerprint có version, stealth JS fix, TLS header,
-  quota atomic, back-off động, log-normal timing.
+BẢN ĐẦY ĐỦ — v5 (khớp 100% API mà ck15.py gọi)
 
+API ck15.py yêu cầu:
+    # Hằng số
+    DEFAULT_MAX_CLAIMS_PER_DAY
+    DEFAULT_MAX_TRANSFERS_PER_DAY
+    DEFAULT_MAX_TRANSFER_AMOUNT
 
+    # Hàm
+    get_or_create_fingerprint(cookie_file) -> dict
+    stealth_launch_args() -> list
+    build_stealth_js(fp) -> str
+    warm_up_account(page, max_s=15)
+    check_daily_quota(cookie_file, max_claims=, max_transfers=, max_amount=) -> (bool, str)
+    record_session_start(cookie_file)
+    random_batch_size(base, lo=, hi=) -> int
+    detect_soft_ban(text_or_response) -> bool
+    set_soft_ban(cookie_file, duration_s=900) -> float
+    record_transfer(cookie_file, amt)
+    jitter_sleep(a, b)              # SLEEP
+    record_claim(cookie_file, amount)
+    maybe_idle_browse(page, claim_count, every=N)
+    human_delay(min_s, max_s)       # SLEEP (KHÔNG phải return float)
+    random_session_offset(jitter) -> float
+
+  
 """
 
 from __future__ import annotations
@@ -29,7 +48,7 @@ from typing import Any, Optional, Iterable, Union, Tuple, Dict
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# PATHS & HẰNG SỐ
+# PATHS & HẰNG SỐ TOÀN CỤC
 # ============================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FINGERPRINT_DIR = os.path.join(BASE_DIR, "fingerprints")
@@ -39,10 +58,13 @@ os.makedirs(STATE_DIR, exist_ok=True)
 
 PROFILE_VERSION = 2
 
-DAILY_CLAIM_LIMIT = 25
-DAILY_TRANSFER_LIMIT = 15
+# Hằng số ck15.py đọc qua getattr(al, ..., default)
+DEFAULT_MAX_CLAIMS_PER_DAY = 180
+DEFAULT_MAX_TRANSFERS_PER_DAY = 30
+DEFAULT_MAX_TRANSFER_AMOUNT = 2_000_000
 
-# Ngưỡng soft-ban mặc định (giây) — có thể override qua state
+DAILY_CLAIM_LIMIT = DEFAULT_MAX_CLAIMS_PER_DAY
+DAILY_TRANSFER_LIMIT = DEFAULT_MAX_TRANSFERS_PER_DAY
 DEFAULT_SOFT_BAN_SECONDS = 900
 
 
@@ -94,10 +116,8 @@ def _build_fingerprint(seed: int) -> dict:
         f"AppleWebKit/537.36 (KHTML, like Gecko) "
         f"Chrome/{chrome_ver} Safari/537.36"
     )
-
     width = rng.choice([1366, 1440, 1536, 1600, 1920])
     height = rng.choice([768, 864, 900, 1080])
-
     gpu = rng.choice(plat["gpus"])
     renderer = plat["renderer_tpl"].format(gpu=gpu)
 
@@ -114,6 +134,7 @@ def _build_fingerprint(seed: int) -> dict:
         "screen": {"width": width, "height": height, "colorDepth": 24},
         "hardware_concurrency": rng.choice([4, 8, 12, 16]),
         "device_memory": rng.choice([4, 8, 16]),
+        "color_scheme": "light",
         "webgl": {
             "vendor": plat["gl_vendor"],
             "renderer": renderer,
@@ -147,7 +168,6 @@ def get_or_create_fingerprint(cookie_path: str) -> dict:
 
 
 def rotate_fingerprint(cookie_path: str) -> dict:
-    """Xoá fingerprint cũ để buộc tạo mới (dùng sau khi bị flag nặng)."""
     seed = _seed_from_cookie_path(cookie_path)
     fp_path = os.path.join(FINGERPRINT_DIR, f"fp_{seed:016x}.json")
     if os.path.exists(fp_path):
@@ -331,7 +351,6 @@ def build_stealth_js(fp: dict) -> str:
 
 
 def apply_stealth(page, fp: dict, context=None) -> None:
-    """Gọi TRƯỚC page.goto()."""
     try:
         page.add_init_script(build_stealth_js(fp))
     except Exception as e:
@@ -344,30 +363,137 @@ def apply_stealth(page, fp: dict, context=None) -> None:
 
 
 # ============================================================
-# C) TIMING & BATCH SIZE
+# C) TIMING — SLEEPING HELPERS
+# ------------------------------------------------------------
+# ⚠️ QUAN TRỌNG: human_delay và jitter_sleep PHẢI tự sleep.
+# ck15.py gọi:
+#     al.human_delay(max(2.0, DELAY), max(4.0, DELAY+3.0))   # SLEEP
+#     al.human_delay(max(3.0, DELAY), max(8.0, DELAY+5.0))   # SLEEP
+#     al.jitter_sleep(1.0, 1.0)                              # SLEEP
+#     al.jitter_sleep(1.0, 0.8)                              # SLEEP
+# KHÔNG wrap trong time.sleep() → hàm phải sleep bên trong.
 # ============================================================
-def human_delay(base: float = 2.0, spread: float = 0.6,
-                min_s: float = 0.4, max_s: float = 20.0) -> float:
-    if random.random() < 0.05:
-        return random.uniform(max_s, max_s * 2)
-    mu = math.log(max(base, 1e-3))
-    d = random.lognormvariate(mu, spread)
-    return max(min_s, min(max_s, d))
+
+def human_delay(min_s: float = 1.0, max_s: float = 3.0,
+                *args, **kwargs) -> float:
+    """
+    Sleep ngẫu nhiên trong [min_s, max_s] giây.
+
+    ck15.py gọi: al.human_delay(3.0, 6.0)  → sleep uniform(3, 6)
+                  al.human_delay(10.0, 13.0) → sleep uniform(10, 13)
+
+    Trả về duration đã sleep (float).
+    """
+    try:
+        lo = float(min_s)
+        hi = float(max_s if max_s is not None else min_s)
+    except Exception:
+        lo, hi = 1.0, 3.0
+
+    if hi < lo:
+        lo, hi = hi, lo
+
+    # 20% trường hợp ưu tiên nửa trên (đuôi dài giống người thật)
+    if hi > lo:
+        if random.random() < 0.2:
+            d = random.uniform((lo + hi) / 2.0, hi)
+        else:
+            d = random.uniform(lo, hi)
+    else:
+        d = lo
+
+    time.sleep(d)
+    return d
 
 
-def sleep_human(base: float = 2.0, spread: float = 0.6) -> None:
-    time.sleep(human_delay(base, spread))
+def jitter_sleep(a: float = 1.0, b: float = 1.0,
+                 *args, **kwargs) -> float:
+    """
+    Alias của human_delay — sleep ngẫu nhiên.
+    ck15.py gọi: al.jitter_sleep(1.0, 1.0) / al.jitter_sleep(1.0, 0.8)
+    """
+    return human_delay(a, b)
+
+
+# Alias
+sleep_human = human_delay
+jitter = jitter_sleep
+random_sleep = jitter_sleep
+human_sleep = jitter_sleep
+random_delay = human_delay
+rand_delay = human_delay
+humanize_delay = human_delay
+
+
+def _human_delay_value(min_s: float = 1.0, max_s: float = 3.0) -> float:
+    """Chỉ trả về giá trị, KHÔNG sleep (dùng khi cần tính toán)."""
+    try:
+        lo = float(min_s)
+        hi = float(max_s if max_s is not None else min_s)
+    except Exception:
+        lo, hi = 1.0, 3.0
+    if hi < lo:
+        lo, hi = hi, lo
+    return random.uniform(lo, hi)
 
 
 def human_batch_size(lo: int = 3, hi: int = 8) -> int:
     return random.randint(lo, hi)
 
 
-# Alias cũ — nếu ck20.py gọi tên khác
-random_delay = human_delay
-rand_delay = human_delay
-humanize_delay = human_delay
-get_human_delay = human_delay
+# ---------- random_batch_size (ck15.py) ----------
+def random_batch_size(base: int = 40,
+                      lo: Optional[int] = None,
+                      hi: Optional[int] = None,
+                      *args, **kwargs) -> int:
+    """
+    ck15.py gọi: al.random_batch_size(CLAIM_BATCH, lo=max(10, CLAIM_BATCH-5), hi=CLAIM_BATCH+5)
+    """
+    if lo is None:
+        lo = max(1, int(base * 0.75))
+    if hi is None:
+        hi = int(base * 1.25)
+    lo = max(1, int(lo))
+    hi = max(lo, int(hi))
+    return random.randint(lo, hi)
+
+
+batch_size = random_batch_size
+jitter_batch = random_batch_size
+
+
+# ---------- random_session_offset (HÀM GÂY LỖI CI) ----------
+def random_session_offset(jitter: Union[int, float, Tuple, List, None] = None,
+                          *args, **kwargs) -> float:
+    """
+    ck15.py gọi: al.random_session_offset(SESSION_START_JITTER)
+    với SESSION_START_JITTER = int(os.environ.get("SESSION_START_JITTER", "180"))
+
+    Trả về offset (giây) ngẫu nhiên:
+        random_session_offset(180)          → uniform(0, 180)
+        random_session_offset((10, 60))     → uniform(10, 60)
+        random_session_offset(min=5, max=90)
+    """
+    lo, hi = 0.0, 60.0
+
+    if isinstance(jitter, (int, float)) and not isinstance(jitter, bool):
+        hi = float(jitter)
+    elif isinstance(jitter, (tuple, list)) and len(jitter) >= 2:
+        lo, hi = float(jitter[0]), float(jitter[1])
+    else:
+        lo = float(kwargs.get("min", kwargs.get("lo", lo)))
+        hi = float(kwargs.get("max", kwargs.get("hi", hi)))
+
+    if hi < lo:
+        lo, hi = hi, lo
+    return random.uniform(lo, hi)
+
+
+session_offset = random_session_offset
+random_jitter = random_session_offset
+random_start_offset = random_session_offset
+random_start_delay = random_session_offset
+startup_jitter = random_session_offset
 
 
 # ============================================================
@@ -392,10 +518,13 @@ def _default_state() -> dict:
         "date": date.today().isoformat(),
         "claims": 0,
         "transfers": 0,
+        "transfer_amount": 0,
+        "sessions": 0,
         "soft_ban_until": 0,
         "consecutive_failures": 0,
-        "claim_limit": DAILY_CLAIM_LIMIT,
-        "transfer_limit": DAILY_TRANSFER_LIMIT,
+        "claim_limit": DEFAULT_MAX_CLAIMS_PER_DAY,
+        "transfer_limit": DEFAULT_MAX_TRANSFERS_PER_DAY,
+        "amount_limit": DEFAULT_MAX_TRANSFER_AMOUNT,
         "last_update": time.time(),
     }
 
@@ -424,98 +553,120 @@ def save_state(account_id: str, st: dict) -> None:
 
 
 # ============================================================
-# E) QUOTA — API GỐC (BACKWARD-COMPAT)
-# ------------------------------------------------------------
-# Đây là hàm ck20.py gọi ở dòng 932.
-# Signature linh hoạt để chấp nhận mọi cách gọi cũ.
+# E) QUOTA — API GỐC
 # ============================================================
 def check_daily_quota(account_id: Any = None,
-                      action: str = "claim",
+                      action: Optional[str] = None,
                       *args, **kwargs) -> Tuple[bool, str]:
     """
     Kiểm tra quota hàng ngày.
 
-    Trả về: (ok: bool, reason: str)
+    ck15.py gọi:
+        al.check_daily_quota(
+            SINGLE_COOKIE_FILE,
+            max_claims=MAX_CLAIMS_PER_DAY,
+            max_transfers=MAX_TRANSFERS_PER_DAY,
+            max_amount=MAX_TRANSFER_AMOUNT_PER_DAY,
+        )
+    → action mặc định None → kiểm tra TẤT CẢ (claim + transfer + amount),
+      trả về False nếu BẤT KỲ hạn mức nào đã đạt.
 
-    Các kiểu gọi được hỗ trợ:
-        check_daily_quota("acc1")
-        check_daily_quota("acc1", "claim")
-        check_daily_quota("acc1", action="transfer")
-        check_daily_quota(account_id="acc1", kind="claim")
-        check_daily_quota(state_dict)          # truyền thẳng state
+    Cũng hỗ trợ:
+        check_daily_quota(acc, "claim")
+        check_daily_quota(acc, action="transfer")
+        check_daily_quota(state_dict)
+
+    Trả về: (ok: bool, reason: str)
     """
-    # Cho phép truyền state dict trực tiếp
     if isinstance(account_id, dict):
         st = account_id
-        acc_label = st.get("account_id", "inline")
     else:
-        # Hỗ trợ kwargs thay thế
         if account_id is None:
             account_id = (kwargs.get("account") or kwargs.get("account_id")
                           or kwargs.get("aid") or "default")
-        acc_label = str(account_id)
-        st = load_state(acc_label)
+        st = load_state(str(account_id))
 
-    # Alias action từ kwargs
-    act = (action or kwargs.get("kind") or kwargs.get("type")
-           or kwargs.get("category") or "claim").lower()
+    # Cập nhật giới hạn từ kwargs
+    if "max_claims" in kwargs:
+        st["claim_limit"] = int(kwargs["max_claims"])
+    if "max_transfers" in kwargs:
+        st["transfer_limit"] = int(kwargs["max_transfers"])
+    if "max_amount" in kwargs:
+        st["amount_limit"] = int(kwargs["max_amount"])
 
-    # 1) Đang soft-ban?
+    # 1) Soft-ban?
     now = time.time()
     until = st.get("soft_ban_until", 0) or 0
     if until and now < until:
-        remain = int(until - now)
-        return False, f"soft_ban còn {remain}s"
+        return False, f"soft_ban còn {int(until - now)}s"
 
-    # 2) Phân loại action
-    if act in ("claim", "claims", "reward", "rewards", "collect"):
-        used = st.get("claims", 0)
-        limit = st.get("claim_limit", DAILY_CLAIM_LIMIT)
-        label = "claim"
-    elif act in ("transfer", "transfers", "send", "gift", "give"):
-        used = st.get("transfers", 0)
-        limit = st.get("transfer_limit", DAILY_TRANSFER_LIMIT)
-        label = "transfer"
+    # 2) Chọn action
+    act = (action or kwargs.get("kind") or kwargs.get("type")
+           or kwargs.get("category"))
+
+    # 3) Nếu action=None → kiểm tra cả 3
+    checks = []
+    if act is None:
+        checks = ["claim", "transfer", "amount"]
     else:
-        # Không rõ → cho qua nhưng ghi rõ để dễ debug
-        return True, f"unknown_action:{act}"
+        checks = [act.lower()]
 
-    if used >= limit:
-        return False, f"{label} limit reached ({used}/{limit})"
+    for c in checks:
+        if c in ("claim", "claims", "reward", "rewards", "collect"):
+            used = st.get("claims", 0)
+            limit = st.get("claim_limit", DEFAULT_MAX_CLAIMS_PER_DAY)
+            label = "claim"
+        elif c in ("transfer", "transfers", "send", "gift", "give"):
+            used = st.get("transfers", 0)
+            limit = st.get("transfer_limit", DEFAULT_MAX_TRANSFERS_PER_DAY)
+            label = "transfer"
+        elif c in ("amount", "transfer_amount"):
+            used = st.get("transfer_amount", 0)
+            limit = st.get("amount_limit", DEFAULT_MAX_TRANSFER_AMOUNT)
+            label = "amount"
+        else:
+            continue
+        if limit and used >= limit:
+            return False, f"{label} limit reached ({used}/{limit})"
 
-    return True, f"ok ({used}/{limit})"
+    return True, "ok"
 
 
-# Aliases — phòng khi ck20.py gọi tên khác
 check_quota = check_daily_quota
 check_daily_limit = check_daily_quota
 check_limit = check_daily_quota
-can_claim = lambda aid=None, **kw: check_daily_quota(aid, "claim", **kw)[0]
-can_transfer = lambda aid=None, **kw: check_daily_quota(aid, "transfer", **kw)[0]
 
 
-def record_claim(account_id: str, n: int = 1) -> None:
-    """Ghi nhận đã claim (mặc định +1). Chấp nhận n để tăng nhiều lần."""
+def record_claim(account_id: str, amount: int = 1) -> None:
+    """ck15.py: al.record_claim(SINGLE_COOKIE_FILE, amount)"""
     st = load_state(account_id)
-    st["claims"] = st.get("claims", 0) + max(1, int(n))
+    st["claims"] = st.get("claims", 0) + 1
     save_state(account_id, st)
 
 
-def record_transfer(account_id: str, n: int = 1) -> None:
+def record_transfer(account_id: str, amount: int = 0) -> None:
+    """ck15.py: al.record_transfer(SINGLE_COOKIE_FILE, amt)"""
     st = load_state(account_id)
-    st["transfers"] = st.get("transfers", 0) + max(1, int(n))
+    st["transfers"] = st.get("transfers", 0) + 1
+    st["transfer_amount"] = st.get("transfer_amount", 0) + int(amount or 0)
     save_state(account_id, st)
 
 
-# Alias cũ
+def record_session_start(account_id: str) -> None:
+    """ck15.py: al.record_session_start(SINGLE_COOKIE_FILE)"""
+    st = load_state(account_id)
+    st["sessions"] = st.get("sessions", 0) + 1
+    save_state(account_id, st)
+
+
 increment_claim = record_claim
 increment_transfer = record_transfer
 mark_claim = record_claim
 mark_transfer = record_transfer
+record_session = record_session_start
 
 
 def reset_daily(account_id: str) -> None:
-    """Reset quota cho hôm nay (thường không cần gọi)."""
     save_state(account_id, _default_state())
 
 
@@ -539,13 +690,8 @@ def backoff(account_id: str, base_seconds: int = 300) -> int:
     return cool
 
 
-# Alias cũ
-soft_ban = backoff
-apply_backoff = backoff
-
-
 # ============================================================
-# F) PHÁT HIỆN SOFT-BAN
+# F) SOFT-BAN
 # ============================================================
 SOFT_BAN_KEYWORDS = [
     r"\brate[\s_-]?limit",
@@ -557,6 +703,9 @@ SOFT_BAN_KEYWORDS = [
     r"you'?re temporarily blocked",
     r"account (has been )?(restricted|suspended)",
     r"checkpoint",
+    r"blocked",
+    r"bị khóa",
+    r"bị chặn",
 ]
 _SOFT_BAN_RE = re.compile("|".join(SOFT_BAN_KEYWORDS), re.IGNORECASE)
 
@@ -566,20 +715,25 @@ def detect_soft_ban(response: Any = None,
                     body_text: Optional[str] = None,
                     *args, **kwargs) -> bool:
     """
-    Trả về True nếu có dấu hiệu soft-ban.
-    Chấp nhận: (response), (status), (body_text), hoặc kết hợp.
+    ck15.py gọi:
+        al.detect_soft_ban(msg)
+        al.detect_soft_ban(r.get("error", ""))
+        al.detect_soft_ban(result.get("error", ""))
+        al.detect_soft_ban(result.get("message", ""))
+    → arg đầu có thể là str (message) hoặc response object.
     """
-    # status trực tiếp
+    if isinstance(response, str) and body_text is None:
+        body_text = response
+        response = None
+
     if status in (429, 403, 503):
         return True
 
-    # response object
     if response is not None:
         s = getattr(response, "status", None) or getattr(response, "status_code", None)
         if s in (429, 403, 503):
             return True
 
-    # text
     text = body_text
     if text is None and response is not None:
         t = getattr(response, "text", None)
@@ -590,18 +744,31 @@ def detect_soft_ban(response: Any = None,
                 text = None
         else:
             text = t
+
     if not text:
         return False
-
-    if _SOFT_BAN_RE.search(str(text)):
-        return True
-    return False
+    return bool(_SOFT_BAN_RE.search(str(text)))
 
 
-# Alias cũ
 is_soft_banned = detect_soft_ban
 is_rate_limited = detect_soft_ban
 is_blocked = detect_soft_ban
+
+
+def set_soft_ban(account_id: str, duration_s: int = DEFAULT_SOFT_BAN_SECONDS,
+                 reason: str = "") -> float:
+    """ck15.py: al.set_soft_ban(SINGLE_COOKIE_FILE, duration_s=900)"""
+    st = load_state(account_id)
+    until = time.time() + int(duration_s)
+    st["soft_ban_until"] = until
+    save_state(account_id, st)
+    logger.warning("Soft-ban %s trong %ss (lý do: %s)",
+                   account_id, duration_s, reason or "không rõ")
+    return until
+
+
+apply_soft_ban = set_soft_ban
+mark_soft_ban = set_soft_ban
 
 
 # ============================================================
@@ -624,7 +791,6 @@ def pick_transfer_target(targets: Iterable[str]) -> Optional[str]:
     return chosen
 
 
-# Alias cũ
 choose_target = pick_transfer_target
 select_transfer_target = pick_transfer_target
 
@@ -632,10 +798,9 @@ select_transfer_target = pick_transfer_target
 # ============================================================
 # H) CHROMIUM LAUNCH ARGS & CONTEXT OPTIONS
 # ============================================================
-def chromium_launch_args(fp: dict) -> list:
-    w = fp["viewport"]["width"]
-    h = fp["viewport"]["height"]
-    return [
+def stealth_launch_args(fp: Optional[dict] = None) -> list:
+    """ck15.py gọi: al.stealth_launch_args()  — KHÔNG truyền tham số."""
+    args = [
         "--disable-blink-features=AutomationControlled",
         "--disable-features=IsolateOrigins,site-per-process,AutomationControlled",
         "--disable-infobars",
@@ -646,9 +811,18 @@ def chromium_launch_args(fp: dict) -> list:
         "--disable-sync",
         "--metrics-recording-only",
         "--mute-audio",
-        f"--window-size={w},{h}",
-        f"--lang={fp['locale']}",
     ]
+    if fp:
+        try:
+            w = fp["viewport"]["width"]
+            h = fp["viewport"]["height"]
+            args += [f"--window-size={w},{h}", f"--lang={fp['locale']}"]
+        except Exception:
+            pass
+    return args
+
+
+chromium_launch_args = stealth_launch_args
 
 
 def chromium_context_options(fp: dict) -> dict:
@@ -662,7 +836,7 @@ def chromium_context_options(fp: dict) -> dict:
         "device_scale_factor": 1,
         "is_mobile": False,
         "has_touch": False,
-        "color_scheme": "light",
+        "color_scheme": fp.get("color_scheme", "light"),
         "extra_http_headers": {
             "Accept-Language": f"{fp['locale']},"
                               f"{fp['locale'].split('-')[0]};q=0.9,en;q=0.8",
@@ -678,10 +852,9 @@ def chromium_context_options(fp: dict) -> dict:
 
 
 def build_context(playwright, fp: dict, headless: bool = True):
-    """Tạo browser + context với stealth đã áp dụng."""
     browser = playwright.chromium.launch(
         headless=headless,
-        args=chromium_launch_args(fp),
+        args=stealth_launch_args(fp),
     )
     context = browser.new_context(**chromium_context_options(fp))
     context.add_init_script(build_stealth_js(fp))
@@ -691,6 +864,28 @@ def build_context(playwright, fp: dict, headless: bool = True):
 # ============================================================
 # I) HÀNH VI NGƯỜI
 # ============================================================
+def warm_up_account(page, max_s: float = 15.0) -> None:
+    """ck15.py: al.warm_up_account(page, max_s=15)"""
+    try:
+        end = time.time() + float(max_s)
+        while time.time() < end:
+            delta = random.randint(100, 500)
+            steps = random.randint(3, 6)
+            for _ in range(steps):
+                try:
+                    page.mouse.wheel(0, delta // steps)
+                except Exception:
+                    break
+                time.sleep(random.uniform(0.05, 0.15))
+            if random.random() < 0.4:
+                time.sleep(random.uniform(0.5, 2.0))
+    except Exception as e:
+        logger.debug("warm_up_account lỗi: %s", e)
+
+
+warmup = warm_up_account
+
+
 def human_scroll(page, max_scrolls: int = 5) -> None:
     try:
         for _ in range(random.randint(1, max_scrolls)):
@@ -707,7 +902,7 @@ def human_scroll(page, max_scrolls: int = 5) -> None:
 
 def human_idle(page, min_s: float = 5.0, max_s: float = 20.0) -> None:
     dur = random.uniform(min_s, max_s)
-    logger.info("Idle %.1fs (giả lập người dùng nghỉ)", dur)
+    logger.info("Idle %.1fs", dur)
     t_end = time.time() + dur
     while time.time() < t_end:
         try:
@@ -717,6 +912,47 @@ def human_idle(page, min_s: float = 5.0, max_s: float = 20.0) -> None:
         time.sleep(random.uniform(0.5, 2.0))
 
 
+# ---------- maybe_idle_browse (ck15.py MỚI cần) ----------
+def maybe_idle_browse(page, claim_count: int, every: int = 60,
+                      min_s: float = 10.0, max_s: float = 30.0,
+                      *args, **kwargs) -> bool:
+    """
+    Cứ mỗi `every` claim thì nghỉ 1 nhịp scroll feed.
+
+    ck15.py gọi:
+        al.maybe_idle_browse(page, claim_count, every=IDLE_EVERY_CLAIMS)
+
+    Trả về True nếu CÓ nghỉ, False nếu bỏ qua.
+    """
+    try:
+        every = int(every or 0)
+        claim_count = int(claim_count or 0)
+    except Exception:
+        return False
+
+    if every <= 0 or claim_count <= 0 or claim_count % every != 0:
+        return False
+
+    dur = random.uniform(min_s, max_s)
+    logger.info("[ANTI-BAN] Idle browse %.1fs sau %d claims", dur, claim_count)
+    t_end = time.time() + dur
+
+    while time.time() < t_end:
+        try:
+            delta = random.randint(200, 800)
+            steps = random.randint(3, 6)
+            for _ in range(steps):
+                page.mouse.wheel(0, delta // steps)
+                time.sleep(random.uniform(0.05, 0.15))
+            time.sleep(random.uniform(0.5, 2.0))
+        except Exception:
+            time.sleep(1.0)
+    return True
+
+
+idle_browse = maybe_idle_browse
+
+
 def maybe_take_break() -> None:
     if random.random() < 0.05:
         dur = random.uniform(30, 180)
@@ -724,7 +960,6 @@ def maybe_take_break() -> None:
         time.sleep(dur)
 
 
-# Alias cũ
 scroll_like_human = human_scroll
 idle_like_human = human_idle
 take_break = maybe_take_break
@@ -737,28 +972,50 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(message)s")
 
-    fp = get_or_create_fingerprint("cookies/demo_account.json")
-    print("Fingerprint demo:")
-    print(json.dumps(fp, ensure_ascii=False, indent=2))
+    print("=== Test API ck15.py cần ===")
+    print("Hằng số:",
+          DEFAULT_MAX_CLAIMS_PER_DAY,
+          DEFAULT_MAX_TRANSFERS_PER_DAY,
+          DEFAULT_MAX_TRANSFER_AMOUNT)
 
-    print("\nDelay mẫu:", [round(human_delay(), 2) for _ in range(5)])
-    print("Batch size mẫu:", [human_batch_size() for _ in range(5)])
+    print("\nrandom_session_offset(180):", random_session_offset(180))
+    print("random_session_offset((10, 60)):", random_session_offset((10, 60)))
+    print("random_batch_size(40, lo=35, hi=45):",
+          random_batch_size(40, lo=35, hi=45))
 
-    # Test API gốc (cái đang gây lỗi)
-    print("\n--- check_daily_quota ---")
-    print("claim:", check_daily_quota("demo_account"))
-    print("transfer:", check_daily_quota("demo_account", "transfer"))
-    print("alias check_quota:", check_quota("demo_account", action="claim"))
+    print("\ncheck_daily_quota('acc1', max_claims=180, max_transfers=30, max_amount=2e6):",
+          check_daily_quota("acc1", max_claims=180,
+                            max_transfers=30, max_amount=2_000_000))
 
-    record_claim("demo_account")
-    print("Sau 1 claim:", load_state("demo_account"))
+    print("\ndetect_soft_ban('bị khóa'):", detect_soft_ban("bị khóa"))
+    print("detect_soft_ban(status=429):", detect_soft_ban(status=429))
 
-    print("\nTarget:", pick_transfer_target(["A", "B", "C", "D", "E"]))
-    print("Target:", pick_transfer_target(["A", "B", "C", "D", "E"]))
-    print("Target:", pick_transfer_target(["A", "B", "C", "D", "E"]))
+    print("\nstealth_launch_args()[:3]:", stealth_launch_args()[:3])
 
-    print("\nsoft_ban test:",
-          detect_soft_ban(body_text="Bạn đã bị tạm thời khóa, vui lòng thử lại sau"))
-    print("soft_ban HTTP 429:", detect_soft_ban(status=429))
-    print("soft_ban bình thường:",
-          detect_soft_ban(body_text="Chúc mừng, bạn nhận được 100 điểm"))
+    print("\n--- human_delay SLEEP test ---")
+    t0 = time.time()
+    dur = human_delay(1.0, 2.0)
+    print(f"human_delay(1.0, 2.0) slept {time.time()-t0:.2f}s (returned {dur:.2f})")
+
+    t0 = time.time()
+    jitter_sleep(1.0, 1.0)
+    print(f"jitter_sleep(1.0, 1.0) slept {time.time()-t0:.2f}s")
+
+    print("\n--- maybe_idle_browse test ---")
+    class FakePage:
+        class mouse:
+            @staticmethod
+            def wheel(a, b): pass
+    print("claim=59, every=60 ->",
+          maybe_idle_browse(FakePage(), 59, every=60))
+    t0 = time.time()
+    print("claim=60, every=60 ->",
+          maybe_idle_browse(FakePage(), 60, every=60, min_s=0.5, max_s=1.0))
+    print(f"  (mất {time.time()-t0:.2f}s)")
+
+    # Test record
+    record_claim("demo", 100)
+    record_transfer("demo", 5000)
+    record_session_start("demo")
+    set_soft_ban("demo", duration_s=60)
+    print("\nState demo:", load_state("demo"))
