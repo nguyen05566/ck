@@ -3,17 +3,11 @@
 """
 Anti-detect / anti-lock module cho jieqi-core.
 
-
-
-Cấu trúc:
-    A) Fingerprint theo tài khoản (ổn định + có version để rotate)
-    B) Stealth JS injection (đã fix lỗi iframe + toString + canvas)
-    C) Timing & batch size giống người thật
-    D) Quản lý quota hàng ngày & trạng thái soft-ban
-    E) Phát hiện soft-ban / rate-limit (đa tín hiệu)
-    F) Luân chuyển đích nhận transfer
-    G) Chromium launch args (+ gợi ý TLS impersonation)
-    H) Mô phỏng hành vi nghỉ / lướt feed
+BẢN ĐẦY ĐỦ — v3
+- Giữ API gốc (backward-compat): check_daily_quota(), record_claim(),
+  record_transfer(), detect_soft_ban(), human_delay(), v.v.
+- Kèm cải tiến: fingerprint có version, stealth JS fix, TLS header,
+  quota atomic, back-off động, log-normal timing.
 
 
 """
@@ -28,13 +22,14 @@ import math
 import random
 import hashlib
 import logging
-from datetime import datetime, date, timedelta
-from typing import Any, Optional, Iterable
+from collections import deque
+from datetime import date
+from typing import Any, Optional, Iterable, Union, Tuple, Dict
 
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# Paths & state
+# PATHS & HẰNG SỐ
 # ============================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FINGERPRINT_DIR = os.path.join(BASE_DIR, "fingerprints")
@@ -42,19 +37,18 @@ STATE_DIR = os.path.join(BASE_DIR, "state")
 os.makedirs(FINGERPRINT_DIR, exist_ok=True)
 os.makedirs(STATE_DIR, exist_ok=True)
 
-PROFILE_VERSION = 2  # [NEW] tăng khi schema fingerprint thay đổi
+PROFILE_VERSION = 2
+
+DAILY_CLAIM_LIMIT = 25
+DAILY_TRANSFER_LIMIT = 15
+
+# Ngưỡng soft-ban mặc định (giây) — có thể override qua state
+DEFAULT_SOFT_BAN_SECONDS = 900
 
 
 # ============================================================
 # A) FINGERPRINT PER-ACCOUNT
-# ------------------------------------------------------------
-# [FIX] Bản cũ tạo fingerprint ngẫu nhiên 1 lần và giữ nguyên vĩnh viễn.
-#       → Vẫn ổn định per-account, NHƯNG có thêm profile_version để
-#         có thể rebuild khi cần rotate (ví dụ sau khi bị flag).
-# [NEW] Bổ sung: timezone, locale, screen, colorDepth, webgl unmasked.
-# [NEW] Chọn UA từ pool Chrome gần đây, tránh version quá cũ.
 # ============================================================
-
 CHROME_VERSIONS = ["131.0.0.0", "130.0.0.0", "129.0.0.0", "128.0.0.0"]
 
 PLATFORM_PROFILES = {
@@ -85,14 +79,12 @@ LANGUAGES_POOL = [
 
 
 def _seed_from_cookie_path(cookie_path: str) -> int:
-    """Sinh seed ổn định từ đường dẫn cookie (đại diện 1 account)."""
     h = hashlib.sha256(cookie_path.encode("utf-8")).hexdigest()
     return int(h[:16], 16)
 
 
 def _build_fingerprint(seed: int) -> dict:
     rng = random.Random(seed)
-
     platform_key = rng.choice(list(PLATFORM_PROFILES.keys()))
     plat = PLATFORM_PROFILES[platform_key]
     chrome_ver = rng.choice(CHROME_VERSIONS)
@@ -133,10 +125,7 @@ def _build_fingerprint(seed: int) -> dict:
 
 
 def get_or_create_fingerprint(cookie_path: str) -> dict:
-    """
-    Trả về fingerprint ổn định cho tài khoản.
-    [FIX] Nếu file tồn tại nhưng phiên bản cũ → rebuild.
-    """
+    """Fingerprint ổn định cho 1 account, có version để rebuild."""
     seed = _seed_from_cookie_path(cookie_path)
     fp_path = os.path.join(FINGERPRINT_DIR, f"fp_{seed:016x}.json")
 
@@ -146,7 +135,7 @@ def get_or_create_fingerprint(cookie_path: str) -> dict:
                 fp = json.load(f)
             if fp.get("profile_version") == PROFILE_VERSION:
                 return fp
-            logger.info("Fingerprint cũ (v%s), rebuild cho cookie=%s",
+            logger.info("Fingerprint cũ (v%s) → rebuild cho %s",
                         fp.get("profile_version"), cookie_path)
         except Exception as e:
             logger.warning("Không đọc được fingerprint cũ (%s), tạo mới.", e)
@@ -158,7 +147,7 @@ def get_or_create_fingerprint(cookie_path: str) -> dict:
 
 
 def rotate_fingerprint(cookie_path: str) -> dict:
-    """[NEW] Xoá fingerprint cũ để buộc tạo mới (dùng khi bị flag nặng)."""
+    """Xoá fingerprint cũ để buộc tạo mới (dùng sau khi bị flag nặng)."""
     seed = _seed_from_cookie_path(cookie_path)
     fp_path = os.path.join(FINGERPRINT_DIR, f"fp_{seed:016x}.json")
     if os.path.exists(fp_path):
@@ -168,55 +157,37 @@ def rotate_fingerprint(cookie_path: str) -> dict:
 
 # ============================================================
 # B) STEALTH JS INJECTION
-# ------------------------------------------------------------
-# [FIX] originalShadowRef dùng trước khi khai báo → ReferenceError.
-# [FIX] Không override Function.prototype.toString toàn cục nữa
-#       (bị phát hiện qua toString.toString()).
-# [FIX] WebGL spoof cả 2 context (WebGL1 & WebGL2) + getExtension.
-# [NEW] Canvas noise rất nhẹ (không phá rendering).
-# [NEW] iframe contentWindow.webdriver được patch đúng cách.
 # ============================================================
-
 def build_stealth_js(fp: dict) -> str:
-    canvas_jitter = fp["seed"] % 3  # 0,1,2 - offset nhỏ
-
+    canvas_jitter = fp["seed"] % 3
     return f"""
 (() => {{
   if (window.__stealth_applied__) return;
 
-  // ---------- 1. webdriver ----------
   try {{
     Object.defineProperty(Navigator.prototype, 'webdriver', {{
-      get: () => false,
-      configurable: true,
+      get: () => false, configurable: true,
     }});
   }} catch (e) {{}}
 
-  // ---------- 2. languages ----------
   try {{
     Object.defineProperty(Navigator.prototype, 'languages', {{
-      get: () => {json.dumps(fp['languages'])},
-      configurable: true,
+      get: () => {json.dumps(fp['languages'])}, configurable: true,
     }});
     Object.defineProperty(Navigator.prototype, 'language', {{
-      get: () => {json.dumps(fp['languages'][0])},
-      configurable: true,
+      get: () => {json.dumps(fp['languages'][0])}, configurable: true,
     }});
   }} catch (e) {{}}
 
-  // ---------- 3. platform / vendor ----------
   try {{
     Object.defineProperty(Navigator.prototype, 'platform', {{
-      get: () => {json.dumps(fp['platform'])},
-      configurable: true,
+      get: () => {json.dumps(fp['platform'])}, configurable: true,
     }});
     Object.defineProperty(Navigator.prototype, 'vendor', {{
-      get: () => {json.dumps(fp['vendor'])},
-      configurable: true,
+      get: () => {json.dumps(fp['vendor'])}, configurable: true,
     }});
   }} catch (e) {{}}
 
-  // ---------- 4. hardware ----------
   try {{
     Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {{
       get: () => {fp['hardware_concurrency']}, configurable: true,
@@ -229,7 +200,6 @@ def build_stealth_js(fp: dict) -> str:
     }});
   }} catch (e) {{}}
 
-  // ---------- 5. plugins ----------
   try {{
     const names = ['PDF Viewer', 'Chrome PDF Viewer', 'Chromium PDF Viewer',
                    'Microsoft Edge PDF Viewer', 'WebKit built-in PDF'];
@@ -244,7 +214,6 @@ def build_stealth_js(fp: dict) -> str:
     }});
   }} catch (e) {{}}
 
-  // ---------- 6. chrome object ----------
   try {{
     if (!window.chrome) window.chrome = {{}};
     if (!window.chrome.runtime) {{
@@ -273,7 +242,6 @@ def build_stealth_js(fp: dict) -> str:
     }}
   }} catch (e) {{}}
 
-  // ---------- 7. permissions.query ----------
   try {{
     const origQuery =
       window.navigator.permissions.query.bind(window.navigator.permissions);
@@ -285,7 +253,6 @@ def build_stealth_js(fp: dict) -> str:
     }};
   }} catch (e) {{}}
 
-  // ---------- 8. WebGL spoof (WebGL1 + WebGL2) ----------
   try {{
     const UNMASKED_VENDOR = 0x9245;
     const UNMASKED_RENDERER = 0x9246;
@@ -303,7 +270,6 @@ def build_stealth_js(fp: dict) -> str:
         default:       return orig.call(this, param);
       }}
     }};
-
     const gl1 = WebGLRenderingContext.prototype.getParameter;
     WebGLRenderingContext.prototype.getParameter = makeSpoof(gl1);
 
@@ -313,7 +279,6 @@ def build_stealth_js(fp: dict) -> str:
     }}
   }} catch (e) {{}}
 
-  // ---------- 9. Canvas noise nhẹ ----------
   try {{
     const jitter = {canvas_jitter};
     const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
@@ -330,7 +295,6 @@ def build_stealth_js(fp: dict) -> str:
     }};
   }} catch (e) {{}}
 
-  // ---------- 10. iframe contentWindow.webdriver (FIX) ----------
   try {{
     const desc = Object.getOwnPropertyDescriptor(
       HTMLIFrameElement.prototype, 'contentWindow'
@@ -355,7 +319,6 @@ def build_stealth_js(fp: dict) -> str:
     }}
   }} catch (e) {{}}
 
-  // ---------- 11. Notification.permission ----------
   try {{
     Object.defineProperty(Notification, 'permission', {{
       get: () => 'default', configurable: true,
@@ -368,16 +331,11 @@ def build_stealth_js(fp: dict) -> str:
 
 
 def apply_stealth(page, fp: dict, context=None) -> None:
-    """
-    [NEW] Helper áp dụng stealth cho 1 Playwright page.
-    Gọi TRƯỚC page.goto(...).
-    """
+    """Gọi TRƯỚC page.goto()."""
     try:
         page.add_init_script(build_stealth_js(fp))
     except Exception as e:
         logger.warning("add_init_script lỗi: %s", e)
-
-    # Gợi ý: nếu dùng context mới, cũng có thể gọi context.add_init_script.
     if context is not None:
         try:
             context.add_init_script(build_stealth_js(fp))
@@ -387,27 +345,13 @@ def apply_stealth(page, fp: dict, context=None) -> None:
 
 # ============================================================
 # C) TIMING & BATCH SIZE
-# ------------------------------------------------------------
-# [NEW] Dùng phân phối log-normal thay vì Poisson thuần
-#       → đuôi dài giống người thật hơn (đôi khi nghỉ lâu).
-# [NEW] Có "quick pause" 5% để giả lập người đang làm việc khác.
 # ============================================================
-
 def human_delay(base: float = 2.0, spread: float = 0.6,
                 min_s: float = 0.4, max_s: float = 20.0) -> float:
-    """
-    Trả về delay (giây) theo log-normal.
-    - base: trung vị mong muốn
-    - spread: độ biến thiên (sigma của log)
-    - 5% xác suất delay dài (quick pause)
-    """
     if random.random() < 0.05:
         return random.uniform(max_s, max_s * 2)
-
-    # log-normal với median = base
     mu = math.log(max(base, 1e-3))
-    sigma = spread
-    d = random.lognormvariate(mu, sigma)
+    d = random.lognormvariate(mu, spread)
     return max(min_s, min(max_s, d))
 
 
@@ -416,18 +360,19 @@ def sleep_human(base: float = 2.0, spread: float = 0.6) -> None:
 
 
 def human_batch_size(lo: int = 3, hi: int = 8) -> int:
-    """Batch size ngẫu nhiên trong khoảng [lo, hi]."""
     return random.randint(lo, hi)
 
 
-# ============================================================
-# D) QUOTA HÀNG NGÀY & STATE
-# ------------------------------------------------------------
-# [FIX] Bản cũ có thể ghi state không atomic → hỏng file.
-#       Dùng ghi tạm rồi os.replace() để atomic.
-# [NEW] Lưu thêm "consecutive_failures" để back-off động.
-# ============================================================
+# Alias cũ — nếu ck20.py gọi tên khác
+random_delay = human_delay
+rand_delay = human_delay
+humanize_delay = human_delay
+get_human_delay = human_delay
 
+
+# ============================================================
+# D) STATE / QUOTA (ATOMIC)
+# ============================================================
 def _state_path(account_id: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", account_id)
     return os.path.join(STATE_DIR, f"state_{safe}.json")
@@ -449,6 +394,8 @@ def _default_state() -> dict:
         "transfers": 0,
         "soft_ban_until": 0,
         "consecutive_failures": 0,
+        "claim_limit": DAILY_CLAIM_LIMIT,
+        "transfer_limit": DAILY_TRANSFER_LIMIT,
         "last_update": time.time(),
     }
 
@@ -464,10 +411,8 @@ def load_state(account_id: str) -> dict:
         logger.warning("State hỏng (%s), reset.", e)
         return _default_state()
 
-    # Reset quota mỗi ngày
     if st.get("date") != date.today().isoformat():
         st = _default_state()
-    # Bổ sung field thiếu (nâng cấp từ bản cũ)
     for k, v in _default_state().items():
         st.setdefault(k, v)
     return st
@@ -478,51 +423,100 @@ def save_state(account_id: str, st: dict) -> None:
     _atomic_write_json(_state_path(account_id), st)
 
 
-DAILY_CLAIM_LIMIT = 25
-DAILY_TRANSFER_LIMIT = 15
-
-
-def can_claim(account_id: str) -> bool:
-    st = load_state(account_id)
-    if time.time() < st.get("soft_ban_until", 0):
-        return False
-    return st["claims"] < DAILY_CLAIM_LIMIT
-
-
-def can_transfer(account_id: str) -> bool:
-    st = load_state(account_id)
-    if time.time() < st.get("soft_ban_until", 0):
-        return False
-    return st["transfers"] < DAILY_TRANSFER_LIMIT
-
-
-def record_claim(account_id: str) -> None:
-    st = load_state(account_id)
-    st["claims"] += 1
-    save_state(account_id, st)
-
-
-def record_transfer(account_id: str) -> None:
-    st = load_state(account_id)
-    st["transfers"] += 1
-    save_state(account_id, st)
-
-
-def backoff(account_id: str, base_seconds: int = 300) -> int:
+# ============================================================
+# E) QUOTA — API GỐC (BACKWARD-COMPAT)
+# ------------------------------------------------------------
+# Đây là hàm ck20.py gọi ở dòng 932.
+# Signature linh hoạt để chấp nhận mọi cách gọi cũ.
+# ============================================================
+def check_daily_quota(account_id: Any = None,
+                      action: str = "claim",
+                      *args, **kwargs) -> Tuple[bool, str]:
     """
-    [NEW] Back-off động: càng nhiều fail liên tiếp thì nghỉ càng lâu.
-    Trả về số giây đã đặt.
+    Kiểm tra quota hàng ngày.
+
+    Trả về: (ok: bool, reason: str)
+
+    Các kiểu gọi được hỗ trợ:
+        check_daily_quota("acc1")
+        check_daily_quota("acc1", "claim")
+        check_daily_quota("acc1", action="transfer")
+        check_daily_quota(account_id="acc1", kind="claim")
+        check_daily_quota(state_dict)          # truyền thẳng state
     """
+    # Cho phép truyền state dict trực tiếp
+    if isinstance(account_id, dict):
+        st = account_id
+        acc_label = st.get("account_id", "inline")
+    else:
+        # Hỗ trợ kwargs thay thế
+        if account_id is None:
+            account_id = (kwargs.get("account") or kwargs.get("account_id")
+                          or kwargs.get("aid") or "default")
+        acc_label = str(account_id)
+        st = load_state(acc_label)
+
+    # Alias action từ kwargs
+    act = (action or kwargs.get("kind") or kwargs.get("type")
+           or kwargs.get("category") or "claim").lower()
+
+    # 1) Đang soft-ban?
+    now = time.time()
+    until = st.get("soft_ban_until", 0) or 0
+    if until and now < until:
+        remain = int(until - now)
+        return False, f"soft_ban còn {remain}s"
+
+    # 2) Phân loại action
+    if act in ("claim", "claims", "reward", "rewards", "collect"):
+        used = st.get("claims", 0)
+        limit = st.get("claim_limit", DAILY_CLAIM_LIMIT)
+        label = "claim"
+    elif act in ("transfer", "transfers", "send", "gift", "give"):
+        used = st.get("transfers", 0)
+        limit = st.get("transfer_limit", DAILY_TRANSFER_LIMIT)
+        label = "transfer"
+    else:
+        # Không rõ → cho qua nhưng ghi rõ để dễ debug
+        return True, f"unknown_action:{act}"
+
+    if used >= limit:
+        return False, f"{label} limit reached ({used}/{limit})"
+
+    return True, f"ok ({used}/{limit})"
+
+
+# Aliases — phòng khi ck20.py gọi tên khác
+check_quota = check_daily_quota
+check_daily_limit = check_daily_quota
+check_limit = check_daily_quota
+can_claim = lambda aid=None, **kw: check_daily_quota(aid, "claim", **kw)[0]
+can_transfer = lambda aid=None, **kw: check_daily_quota(aid, "transfer", **kw)[0]
+
+
+def record_claim(account_id: str, n: int = 1) -> None:
+    """Ghi nhận đã claim (mặc định +1). Chấp nhận n để tăng nhiều lần."""
     st = load_state(account_id)
-    st["consecutive_failures"] += 1
-    n = st["consecutive_failures"]
-    cool = min(base_seconds * (2 ** (n - 1)), 6 * 3600)  # tối đa 6h
-    cool = int(cool * random.uniform(0.85, 1.15))
-    st["soft_ban_until"] = time.time() + cool
+    st["claims"] = st.get("claims", 0) + max(1, int(n))
     save_state(account_id, st)
-    logger.warning("Backoff account=%s trong %ss (fail lần %d)",
-                   account_id, cool, n)
-    return cool
+
+
+def record_transfer(account_id: str, n: int = 1) -> None:
+    st = load_state(account_id)
+    st["transfers"] = st.get("transfers", 0) + max(1, int(n))
+    save_state(account_id, st)
+
+
+# Alias cũ
+increment_claim = record_claim
+increment_transfer = record_transfer
+mark_claim = record_claim
+mark_transfer = record_transfer
+
+
+def reset_daily(account_id: str) -> None:
+    """Reset quota cho hôm nay (thường không cần gọi)."""
+    save_state(account_id, _default_state())
 
 
 def reset_failures(account_id: str) -> None:
@@ -532,13 +526,27 @@ def reset_failures(account_id: str) -> None:
         save_state(account_id, st)
 
 
-# ============================================================
-# E) PHÁT HIỆN SOFT-BAN / RATE-LIMIT
-# ------------------------------------------------------------
-# [FIX] Bản cũ chỉ dò text → dương tính giả, âm tính giả.
-# [NEW] Đa tín hiệu: HTTP status, keyword có ngữ cảnh, JSON shape.
-# ============================================================
+def backoff(account_id: str, base_seconds: int = 300) -> int:
+    st = load_state(account_id)
+    st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
+    n = st["consecutive_failures"]
+    cool = min(base_seconds * (2 ** (n - 1)), 6 * 3600)
+    cool = int(cool * random.uniform(0.85, 1.15))
+    st["soft_ban_until"] = time.time() + cool
+    save_state(account_id, st)
+    logger.warning("Backoff account=%s trong %ss (fail lần %d)",
+                   account_id, cool, n)
+    return cool
 
+
+# Alias cũ
+soft_ban = backoff
+apply_backoff = backoff
+
+
+# ============================================================
+# F) PHÁT HIỆN SOFT-BAN
+# ============================================================
 SOFT_BAN_KEYWORDS = [
     r"\brate[\s_-]?limit",
     r"too many requests",
@@ -550,85 +558,80 @@ SOFT_BAN_KEYWORDS = [
     r"account (has been )?(restricted|suspended)",
     r"checkpoint",
 ]
-
 _SOFT_BAN_RE = re.compile("|".join(SOFT_BAN_KEYWORDS), re.IGNORECASE)
 
 
-def detect_soft_ban(response: Any = None, status: Optional[int] = None,
-                    body_text: Optional[str] = None) -> bool:
+def detect_soft_ban(response: Any = None,
+                    status: Optional[int] = None,
+                    body_text: Optional[str] = None,
+                    *args, **kwargs) -> bool:
     """
     Trả về True nếu có dấu hiệu soft-ban.
-    - response: object có .status / .text / .json() (tuỳ thư viện)
-    - status: mã HTTP
-    - body_text: text thân response
+    Chấp nhận: (response), (status), (body_text), hoặc kết hợp.
     """
-    # 1) HTTP status
+    # status trực tiếp
     if status in (429, 403, 503):
         return True
+
+    # response object
     if response is not None:
         s = getattr(response, "status", None) or getattr(response, "status_code", None)
         if s in (429, 403, 503):
             return True
 
-    # 2) Text
+    # text
     text = body_text
     if text is None and response is not None:
-        text = getattr(response, "text", None)
-        if callable(text):
+        t = getattr(response, "text", None)
+        if callable(t):
             try:
-                text = text()
+                text = t()
             except Exception:
                 text = None
+        else:
+            text = t
     if not text:
         return False
 
-    # 3) Keyword matching
-    if _SOFT_BAN_RE.search(text):
+    if _SOFT_BAN_RE.search(str(text)):
         return True
-
     return False
 
 
-# ============================================================
-# F) LUÂN CHUYỂN ĐÍCH NHẬN TRANSFER
-# ------------------------------------------------------------
-# [FIX] Tránh hub-and-spoke: xoay đích, không lặp lại quá gần.
-# [NEW] Giữ một deque history để không quay lại đích vừa dùng.
-# ============================================================
+# Alias cũ
+is_soft_banned = detect_soft_ban
+is_rate_limited = detect_soft_ban
+is_blocked = detect_soft_ban
 
-from collections import deque
 
+# ============================================================
+# G) LUÂN CHUYỂN ĐÍCH TRANSFER
+# ============================================================
 _target_history: deque = deque(maxlen=3)
 
 
 def pick_transfer_target(targets: Iterable[str]) -> Optional[str]:
-    """
-    Chọn đích transfer khác 3 đích gần nhất.
-    Nếu pool quá nhỏ (< 4), chấp nhận trùng.
-    """
     pool = [t for t in targets if t]
     if not pool:
         return None
-
     recent = set(_target_history)
     candidates = [t for t in pool if t not in recent]
     if not candidates:
-        # pool nhỏ → chỉ loại đích vừa dùng ngay trước
         last = _target_history[-1] if _target_history else None
         candidates = [t for t in pool if t != last] or pool
-
     chosen = random.choice(candidates)
     _target_history.append(chosen)
     return chosen
 
 
-# ============================================================
-# G) CHROMIUM LAUNCH ARGS
-# ------------------------------------------------------------
-# [NEW] Gợi ý dùng TLS impersonation (curl_cffi, httpcloak) vì
-#       Playwright mặc định vẫn lộ TLS fingerprint.
-# ============================================================
+# Alias cũ
+choose_target = pick_transfer_target
+select_transfer_target = pick_transfer_target
 
+
+# ============================================================
+# H) CHROMIUM LAUNCH ARGS & CONTEXT OPTIONS
+# ============================================================
 def chromium_launch_args(fp: dict) -> list:
     w = fp["viewport"]["width"]
     h = fp["viewport"]["height"]
@@ -645,12 +648,11 @@ def chromium_launch_args(fp: dict) -> list:
         "--mute-audio",
         f"--window-size={w},{h}",
         f"--lang={fp['locale']}",
-        "--disable-web-security" if False else "--enable-features=NetworkService",
     ]
 
 
 def chromium_context_options(fp: dict) -> dict:
-    """Options cho browser.new_context()."""
+    chrome_major = fp["chrome_version"].split(".")[0]
     return {
         "user_agent": fp["user_agent"],
         "viewport": fp["viewport"],
@@ -665,8 +667,8 @@ def chromium_context_options(fp: dict) -> dict:
             "Accept-Language": f"{fp['locale']},"
                               f"{fp['locale'].split('-')[0]};q=0.9,en;q=0.8",
             "sec-ch-ua": (
-                f'"Chromium";v="{fp["chrome_version"].split(".")[0]}", '
-                f'"Google Chrome";v="{fp["chrome_version"].split(".")[0]}", '
+                f'"Chromium";v="{chrome_major}", '
+                f'"Google Chrome";v="{chrome_major}", '
                 f'"Not?A_Brand";v="24"'
             ),
             "sec-ch-ua-mobile": "?0",
@@ -675,13 +677,20 @@ def chromium_context_options(fp: dict) -> dict:
     }
 
 
-# ============================================================
-# H) MÔ PHỎNG HÀNH VI NGHỈ / LƯỚT FEED
-# ------------------------------------------------------------
-# [NEW] Scroll có gia tốc, đôi khi dừng đọc lâu.
-# [NEW] Có thể click nhầm link rồi back (giống người).
-# ============================================================
+def build_context(playwright, fp: dict, headless: bool = True):
+    """Tạo browser + context với stealth đã áp dụng."""
+    browser = playwright.chromium.launch(
+        headless=headless,
+        args=chromium_launch_args(fp),
+    )
+    context = browser.new_context(**chromium_context_options(fp))
+    context.add_init_script(build_stealth_js(fp))
+    return browser, context
 
+
+# ============================================================
+# I) HÀNH VI NGƯỜI
+# ============================================================
 def human_scroll(page, max_scrolls: int = 5) -> None:
     try:
         for _ in range(random.randint(1, max_scrolls)):
@@ -690,7 +699,6 @@ def human_scroll(page, max_scrolls: int = 5) -> None:
             for _ in range(steps):
                 page.mouse.wheel(0, delta // steps)
                 time.sleep(random.uniform(0.03, 0.12))
-            # đôi khi dừng đọc
             if random.random() < 0.35:
                 time.sleep(random.uniform(1.0, 4.0))
     except Exception as e:
@@ -698,7 +706,6 @@ def human_scroll(page, max_scrolls: int = 5) -> None:
 
 
 def human_idle(page, min_s: float = 5.0, max_s: float = 20.0) -> None:
-    """Nghỉ giả lập người dùng đang làm việc khác."""
     dur = random.uniform(min_s, max_s)
     logger.info("Idle %.1fs (giả lập người dùng nghỉ)", dur)
     t_end = time.time() + dur
@@ -711,33 +718,20 @@ def human_idle(page, min_s: float = 5.0, max_s: float = 20.0) -> None:
 
 
 def maybe_take_break() -> None:
-    """5% xác suất nghỉ dài giữa batch."""
     if random.random() < 0.05:
         dur = random.uniform(30, 180)
         logger.info("Nghỉ dài %.1fs", dur)
         time.sleep(dur)
 
 
-# ============================================================
-# TIỆN ÍCH: build browser context hoàn chỉnh
-# ============================================================
-
-def build_context(playwright, fp: dict, headless: bool = True):
-    """
-    [NEW] Tạo browser + context với đầy đủ stealth đã áp dụng.
-    Trả về (browser, context).
-    """
-    browser = playwright.chromium.launch(
-        headless=headless,
-        args=chromium_launch_args(fp),
-    )
-    context = browser.new_context(**chromium_context_options(fp))
-    context.add_init_script(build_stealth_js(fp))
-    return browser, context
+# Alias cũ
+scroll_like_human = human_scroll
+idle_like_human = human_idle
+take_break = maybe_take_break
 
 
 # ============================================================
-# SELF-TEST NHANH
+# SELF-TEST
 # ============================================================
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
@@ -750,14 +744,21 @@ if __name__ == "__main__":
     print("\nDelay mẫu:", [round(human_delay(), 2) for _ in range(5)])
     print("Batch size mẫu:", [human_batch_size() for _ in range(5)])
 
-    st = load_state("demo_account")
-    print("State ban đầu:", st)
+    # Test API gốc (cái đang gây lỗi)
+    print("\n--- check_daily_quota ---")
+    print("claim:", check_daily_quota("demo_account"))
+    print("transfer:", check_daily_quota("demo_account", "transfer"))
+    print("alias check_quota:", check_quota("demo_account", action="claim"))
+
     record_claim("demo_account")
     print("Sau 1 claim:", load_state("demo_account"))
 
-    print("Target được chọn:",
-          pick_transfer_target(["A", "B", "C", "D", "E"]))
-    print("Target được chọn:",
-          pick_transfer_target(["A", "B", "C", "D", "E"]))
-    print("Target được chọn:",
-          pick_transfer_target(["A", "B", "C", "D", "E"]))
+    print("\nTarget:", pick_transfer_target(["A", "B", "C", "D", "E"]))
+    print("Target:", pick_transfer_target(["A", "B", "C", "D", "E"]))
+    print("Target:", pick_transfer_target(["A", "B", "C", "D", "E"]))
+
+    print("\nsoft_ban test:",
+          detect_soft_ban(body_text="Bạn đã bị tạm thời khóa, vui lòng thử lại sau"))
+    print("soft_ban HTTP 429:", detect_soft_ban(status=429))
+    print("soft_ban bình thường:",
+          detect_soft_ban(body_text="Chúc mừng, bạn nhận được 100 điểm"))
