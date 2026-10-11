@@ -27,7 +27,7 @@ TRANSFER_DEST_ID = int(os.environ.get("TRANSFER_DEST_ID", "68307415"))
 TRANSFER_ENABLED = os.environ.get("TRANSFER_ENABLED", "true").lower() == "true"
 
 # ============ SINGLE COOKIE MODE ============
-SINGLE_COOKIE_FILE = os.environ.get("SINGLE_COOKIE_FILE", "ck2.txt").strip()
+SINGLE_COOKIE_FILE = os.environ.get("SINGLE_COOKIE_FILE", "ck15.txt").strip()
 
 # ============ Pre-claim transfer threshold ============
 PRE_CLAIM_TRANSFER_THRESHOLD = int(os.environ.get("PRE_CLAIM_TRANSFER_THRESHOLD", "10000"))
