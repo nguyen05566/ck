@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 """
-anti_lock.py — Module chống khóa nick (anti-account-ban) cho jieqi-core.
-
-Cung cấp các tiện ích dùng chung cho ck1.py .. ck8.py:
 
   A) Fingerprint ngẫu nhiên NHƯNG cố định per-account:
      Mỗi cookie file (ck1.txt, ck2.txt ...) sẽ luôn dùng cùng 1 UA / viewport /
