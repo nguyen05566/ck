@@ -1,9 +1,6 @@
 name: ck14
 
 # === CHẠY LIÊN TỤC, KHÔNG CÁCH KHOẢNG ===
-# Game: mystery-xiangqi
-# Cookie: ck9.txt
-# Hub account (nhận xu): 70895363
 # Cron mỗi 6h làm trigger dự phòng; auto-restart ở cuối job sẽ trigger lại
 # ngay lập tức khi bot chạy xong -> không có kẽ hở giữa 2 phiên.
 # Concurrency + cancel-in-progress: false -> phiên sau xếp hàng chờ, không chồng.
@@ -40,9 +37,9 @@ jobs:
           MAX_CLAIMS: '40'
           HEADLESS: 'true'
           COOLDOWN: '3'
-          REST_BETWEEN_RUNS: '1'
+          REST_BETWEEN_RUNS: '5'
           MAX_RUNTIME: '21000'   # 5h50m, để 10 phút buffer trước khi timeout 6h
-          TRANSFER_DEST_ID: '71540520'
+          TRANSFER_DEST_ID: '71675845'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'   # game chặn claim khi balance >55k
           MAX_CLAIMS_PER_DAY: '120'                # quota chống spam (mặc định 180)
@@ -82,7 +79,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-screenshots
+          name: debug-screenshots-ck14
           path: /tmp/debug_*.png
           if-no-files-found: ignore
           retention-days: 7
