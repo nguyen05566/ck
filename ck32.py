@@ -37,7 +37,7 @@ TRANSFER_DEST_ID = int(os.environ.get("TRANSFER_DEST_ID", "51977054"))
 TRANSFER_ENABLED = os.environ.get("TRANSFER_ENABLED", "true").lower() == "true"
 
 # ============ SINGLE COOKIE MODE ============
-SINGLE_COOKIE_FILE = os.environ.get("SINGLE_COOKIE_FILE", "ck3.txt").strip()
+SINGLE_COOKIE_FILE = os.environ.get("SINGLE_COOKIE_FILE", "ck16.txt").strip()
 
 # ============ Pre-claim transfer threshold ============
 # Nếu balance > ngưỡng này (xu), transfer trước khi claim tiếp
