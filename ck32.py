@@ -23,7 +23,7 @@ except Exception as e:
 
 from playwright.sync_api import sync_playwright
 
-GAME_URL = "https://www.facebook.com/gaming/play/chinese-chess-vh"
+GAME_URL = "https://www.facebook.com/gaming/play/chess-vh"
 CLAIM_BATCH = int(os.environ.get("CLAIM_BATCH", "40"))  # Số claim trước khi transfer
 MAX_CYCLES = CLAIM_BATCH
 DELAY = float(os.environ.get("COOLDOWN", "3"))
