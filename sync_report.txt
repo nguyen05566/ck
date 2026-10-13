@@ -1,137 +1,27 @@
-SYNC-REPORT-V3 run=38365795673 DRY_RUN=False canonical=ck1.py (1002 lines)
+SYNC-REPORT-FINAL — Đồng bộ bot về mã 1002 dòng (v10)
+=====================================================
+Thực hiện: 13/10/2026, commit "Sync bots to 1002-line code run=38365795673"
 
-=== Files (per-file values kept: cookie + GAME_URL) ===
-ck1.py     NEW lines= 1002 cookie=ck1.txt game=https://www.facebook.com/gaming/play/tienlen_miennam
-ck2.py     NEW lines= 1002 cookie=ck2.txt game=https://www.facebook.com/gaming/play/phom_tala
-ck3.py     OLD lines=  896 cookie=ck3.txt game=https://www.facebook.com/gaming/play/maubinh_xapxam
-ck4.py     NEW lines= 1002 cookie=ck11.txt game=https://www.facebook.com/gaming/play/maubinh_xapxam
-ck5.py     OLD lines=  896 cookie=ck5.txt game=https://www.facebook.com/gaming/play/gomoku-vh
-ck6.py     NEW lines= 1002 cookie=ck6.txt game=https://www.facebook.com/gaming/play/chinese-chess-vh
-ck7.py     NEW lines= 1002 cookie=ck7.txt game=https://www.facebook.com/gaming/play/mystery-xiangqi
-ck8.py     NEW lines= 1002 cookie=ck8.txt game=https://www.facebook.com/gaming/play/phom_tala
-ck9.py     NEW lines= 1002 cookie=ck9.txt game=https://www.facebook.com/gaming/play/mystery-xiangqi
-ck10.py    NEW lines= 1002 cookie=ck10.txt game=https://www.facebook.com/gaming/play/gomoku-vh
-ck11.py    NEW lines= 1002 cookie=ck11.txt game=https://www.facebook.com/gaming/play/maubinh_xapxam
-ck12.py    NEW lines= 1002 cookie=ck12.txt game=https://www.facebook.com/gaming/play/phom_tala
-ck13.py    NEW lines= 1002 cookie=ck13.txt game=https://www.facebook.com/gaming/play/chinese-chess-vh
-ck14.py    NEW lines= 1002 cookie=ck14.txt game=https://www.facebook.com/gaming/play/tienlen_miennam
-ck15.py    NEW lines= 1002 cookie=ck14.txt game=https://www.facebook.com/gaming/play/phom_tala
-ck16.py    NEW lines= 1002 cookie=ck14.txt game=https://www.facebook.com/gaming/play/mystery-xiangqi
-ck17.py    NEW lines= 1002 cookie=ck14.txt game=https://www.facebook.com/gaming/play/maubinh_xapxam
-ck18.py    NEW lines= 1002 cookie=ck14.txt game=https://www.facebook.com/gaming/play/gomoku-vh
-ck19.py    OLD lines=  896 cookie=ck14.txt game=https://www.facebook.com/gaming/play/chinese-chess-vh
-ck20.py    NEW lines= 1002 cookie=ck15.txt game=https://www.facebook.com/gaming/play/phom_tala
-ck21.py    OLD lines=  896 cookie=ck15.txt game=https://www.facebook.com/gaming/play/maubinh_xapxam
-ck22.py    NEW lines= 1002 cookie=ck15.txt game=https://www.facebook.com/gaming/play/chines-chess-vh
-ck23.py    NEW lines= 1002 cookie=ck15.txt game=https://www.facebook.com/gaming/play/mystery-xiangqi
-ck24.py    NEW lines= 1002 cookie=ck15.txt game=https://www.facebook.com/gaming/play/gomoku-vh
-ck25.py    NEW lines= 1002 cookie=ck15.txt game=https://www.facebook.com/gaming/play/tienlen_miennam
-ck26.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/maubinh_xapxam
-ck27.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/tienlen_miennam
-ck28.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/phom_tala
-ck29.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/sam_loc_vh
-ck30.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/gomoku-vh
-ck31.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/mystery-xiangqi
-ck32.py    OLD lines=  896 cookie=ck16.txt game=https://www.facebook.com/gaming/play/chess-vh
+KẾT QUẢ: 32/32 file ck1.py..ck32.py = 1002 dòng (mã v10 — BATCH TRANSFER + ROBUST RECOVERY)
+- 11 file mã cũ v9 (896 dòng) đã thay: ck3, ck5, ck19, ck21, ck26, ck27, ck28, ck29, ck30, ck31, ck32
+- 21 file v10 còn lại được chuẩn hóa về cùng 1 bản code (chỉ khác comment/tiêu đề trước đó)
+- Code chuẩn lấy từ ck1.py (bản v10 mới nhất trong git history)
 
-=== Variant groups (cookie+game+name normalized): 4 ===
-group0 (11): ['ck3.py', 'ck5.py', 'ck19.py', 'ck21.py', 'ck26.py', 'ck27.py', 'ck28.py', 'ck29.py', 'ck30.py', 'ck31.py', 'ck32.py']
-group1 (10): ['ck2.py', 'ck4.py', 'ck6.py', 'ck7.py', 'ck8.py', 'ck20.py', 'ck22.py', 'ck23.py', 'ck24.py', 'ck25.py']
-group2 (9): ['ck9.py', 'ck10.py', 'ck11.py', 'ck12.py', 'ck13.py', 'ck15.py', 'ck16.py', 'ck17.py', 'ck18.py']
-group3 (2): ['ck1.py', 'ck14.py']
+GIỮ NGUYÊN per-file: cookie (SINGLE_COOKIE_FILE) + GAME_URL + tên game trong tiêu đề/log:
+  ck1=ck1.txt/tienlen_miennam      ck2=ck2.txt/phom_tala          ck3=ck3.txt/maubinh_xapxam
+  ck4=ck11.txt/maubinh_xapxam      ck5=ck5.txt/gomoku-vh          ck6=ck6.txt/chinese-chess-vh
+  ck7=ck7.txt/mystery-xiangqi      ck8=ck8.txt/phom_tala          ck9=ck9.txt/mystery-xiangqi
+  ck10=ck10.txt/gomoku-vh          ck11=ck11.txt/maubinh_xapxam   ck12=ck12.txt/phom_tala
+  ck13=ck13.txt/chinese-chess-vh   ck14=ck14.txt/tienlen_miennam  ck15=ck14.txt/phom_tala
+  ck16=ck14.txt/mystery-xiangqi    ck17=ck14.txt/maubinh_xapxam   ck18=ck14.txt/gomoku-vh
+  ck19=ck14.txt/chinese-chess-vh   ck20=ck15.txt/phom_tala        ck21=ck15.txt/maubinh_xapxam
+  ck22=ck15.txt/chines-chess-vh*   ck23=ck15.txt/mystery-xiangqi  ck24=ck15.txt/gomoku-vh
+  ck25=ck15.txt/tienlen_miennam    ck26=ck16.txt/maubinh_xapxam   ck27=ck16.txt/tienlen_miennam
+  ck28=ck16.txt/phom_tala          ck29=ck16.txt/sam_loc_vh       ck30=ck16.txt/gomoku-vh
+  ck31=ck16.txt/mystery-xiangqi    ck32=ck16.txt/chess-vh
 
-=== Diff group0 vs group1 (max 60 lines) ===
---- ck3.py,ck5.py,ck19.py,ck21.py,ck26.py,ck27.py,ck28.py,ck29.py,ck30.py,ck31.py,ck32.py
-+++ ck2.py,ck4.py,ck6.py,ck7.py,ck8.py,ck20.py,ck22.py,ck23.py,ck24.py,ck25.py
-@@ -1,12 +1,22 @@
- #!/usr/bin/env python3
--"""FB Tien Len Mien Nam reward bot v9 — BATCH TRANSFER MODE
--★ Claim 40 lần rồi transfer, lặp lại cho đến hết MAX_RUNTIME
--Login FB và load game 1 LẦN duy nhất ở đầu session, sau đó:
--  loop: claim 40 lần → transfer → claim 40 lần → transfer → ... cho tới hết MAX_RUNTIME"""
--
--import os, sys, time, re, random
--
--# Thử import module bổ trợ nếu có (không bắt buộc)
-+"""
-+FB <<<GAMENAME>>> reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
-+
-+Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
-+  1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
-+     khi frame bị detach / execution context destroyed (không giữ frame cũ đã chết).
-+  2. recover() tập trung 1 chỗ: có COOLDOWN giữa 2 lần reload, giới hạn tổng số
-+     reload / số lần recover thất bại liên tiếp -> ném SessionDead thay vì loop mãi.
-+  3. Luân phiên reload() và goto() (hard navigate) khi khôi phục.
-+  4. Phát hiện logout / checkpoint / page closed -> kết thúc session ngay.
-+  5. Khi session chết: đóng browser sạch sẽ, nghỉ REST, mở session MỚI nếu còn thời gian
-+     (trước kia browser bị giữ mãi và vòng lặp cứ fail liên tục).
-+  6. Giới hạn fail liên tiếp của claim -> thử recover 1 lần -> vẫn fail thì kết thúc session.
-+"""
-+
-+import os, sys, time, random
-+
-+# Module bổ trợ (không bắt buộc)
- try:
-     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-     import board_dom_merged as m
-@@ -14,6 +24,8 @@
-     m = None
- 
- # === Module chống khóa nick (anti-ban) ===
-+# Cung cấp: fingerprint per-account, stealth JS, human-like timing,
-+# daily quota, soft-ban detection, transfer dest rotation.
- try:
-     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-     import anti_lock as al
-@@ -23,25 +35,32 @@
- 
- from playwright.sync_api import sync_playwright
- 
-+# ============================================================
-+# CONFIG
-+# ============================================================
- GAME_URL = "<<<GAMEURL>>>"
--CLAIM_BATCH = int(os.environ.get("CLAIM_BATCH", "40"))  # Số claim trước khi transfer
--MAX_CYCLES = CLAIM_BATCH
--DELAY = float(os.environ.get("COOLDOWN", "3"))
--REST = int(os.environ.get("REST_BETWEEN_RUNS", "3"))
--MAX_RUNTIME = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
--HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
--
--# ============ TRANSFER LOGIC ============
--# Transfer xu về hub account sau mỗi CLAIM_BATCH lần claim
-+
+(*) Lưu ý: GAME_URL ck22 = "chines-chess-vh" (thiếu chữ "e") — có thể là typo của "chinese-chess-vh".
+    Được giữ nguyên theo nguyên tắc không đổi cấu hình per-file. Cần thì sửa tay dòng 41 ck22.py.
 
-REWRITE ck1.py: 1002 -> 1002 lines, cookie=ck1.txt, game=tienlen_miennam
-REWRITE ck2.py: 1002 -> 1002 lines, cookie=ck2.txt, game=phom_tala
-REWRITE ck3.py: 896 -> 1002 lines, cookie=ck3.txt, game=maubinh_xapxam
-REWRITE ck4.py: 1002 -> 1002 lines, cookie=ck11.txt, game=maubinh_xapxam
-REWRITE ck5.py: 896 -> 1002 lines, cookie=ck5.txt, game=gomoku-vh
-REWRITE ck6.py: 1002 -> 1002 lines, cookie=ck6.txt, game=chinese-chess-vh
-REWRITE ck7.py: 1002 -> 1002 lines, cookie=ck7.txt, game=mystery-xiangqi
-REWRITE ck8.py: 1002 -> 1002 lines, cookie=ck8.txt, game=phom_tala
-REWRITE ck9.py: 1002 -> 1002 lines, cookie=ck9.txt, game=mystery-xiangqi
-REWRITE ck10.py: 1002 -> 1002 lines, cookie=ck10.txt, game=gomoku-vh
-REWRITE ck11.py: 1002 -> 1002 lines, cookie=ck11.txt, game=maubinh_xapxam
-REWRITE ck12.py: 1002 -> 1002 lines, cookie=ck12.txt, game=phom_tala
-REWRITE ck13.py: 1002 -> 1002 lines, cookie=ck13.txt, game=chinese-chess-vh
-REWRITE ck14.py: 1002 -> 1002 lines, cookie=ck14.txt, game=tienlen_miennam
-REWRITE ck15.py: 1002 -> 1002 lines, cookie=ck14.txt, game=phom_tala
-REWRITE ck16.py: 1002 -> 1002 lines, cookie=ck14.txt, game=mystery-xiangqi
-REWRITE ck17.py: 1002 -> 1002 lines, cookie=ck14.txt, game=maubinh_xapxam
-REWRITE ck18.py: 1002 -> 1002 lines, cookie=ck14.txt, game=gomoku-vh
-REWRITE ck19.py: 896 -> 1002 lines, cookie=ck14.txt, game=chinese-chess-vh
-REWRITE ck20.py: 1002 -> 1002 lines, cookie=ck15.txt, game=phom_tala
-REWRITE ck21.py: 896 -> 1002 lines, cookie=ck15.txt, game=maubinh_xapxam
-REWRITE ck22.py: 1002 -> 1002 lines, cookie=ck15.txt, game=chines-chess-vh
-REWRITE ck23.py: 1002 -> 1002 lines, cookie=ck15.txt, game=mystery-xiangqi
-REWRITE ck24.py: 1002 -> 1002 lines, cookie=ck15.txt, game=gomoku-vh
-REWRITE ck25.py: 1002 -> 1002 lines, cookie=ck15.txt, game=tienlen_miennam
-REWRITE ck26.py: 896 -> 1002 lines, cookie=ck16.txt, game=maubinh_xapxam
-REWRITE ck27.py: 896 -> 1002 lines, cookie=ck16.txt, game=tienlen_miennam
-REWRITE ck28.py: 896 -> 1002 lines, cookie=ck16.txt, game=phom_tala
-REWRITE ck29.py: 896 -> 1002 lines, cookie=ck16.txt, game=sam_loc_vh
-REWRITE ck30.py: 896 -> 1002 lines, cookie=ck16.txt, game=gomoku-vh
-REWRITE ck31.py: 896 -> 1002 lines, cookie=ck16.txt, game=mystery-xiangqi
-REWRITE ck32.py: 896 -> 1002 lines, cookie=ck16.txt, game=chess-vh
-Total rewritten: 32
+Workflow hỗ trợ: .github/workflows/sync-code.yml (chạy lại đồng bộ bất cứ lúc nào,
+mặc định dry_run=true chỉ in báo cáo).
