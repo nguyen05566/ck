@@ -7,10 +7,6 @@ on:
         description: 'Dry run (report only, true/false)'
         required: false
         default: 'true'
-      template:
-        description: 'Template file (auto = newest 1002-line file)'
-        required: false
-        default: 'auto'
 
 permissions:
   contents: write
@@ -22,31 +18,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sync ck*.py to 1002-line code (keep cookies) + commit
+      - name: Sync ck*.py to 1002-line code (keep cookie + game per file) + commit
         env:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-          TEMPLATE: ${{ github.event.inputs.template }}
         run: |
           python3 - <<'PYEOF'
           import os, re, glob, subprocess, difflib
 
           DRY = os.environ.get("DRY_RUN", "true").lower() == "true"
-          TEMPLATE = os.environ.get("TEMPLATE", "auto").strip()
           RUN_ID = os.environ.get("GITHUB_RUN_ID", "?")
 
-          cookie_re = re.compile(
-              r'(SINGLE_COOKIE_FILE\s*=\s*os\.environ\.get\("SINGLE_COOKIE_FILE",\s*")([^"]*)("\))'
-          )
+          cookie_re = re.compile(r'(SINGLE_COOKIE_FILE\s*=\s*os\.environ\.get\("SINGLE_COOKIE_FILE",\s*")([^"]*)("\))')
+          game_re   = re.compile(r'(GAME_URL\s*=\s*")([^"]+)(")')
+          name_re   = re.compile(r'FB [^"\n]*? reward bot v10')
 
           files = sorted(glob.glob("ck*.py"), key=lambda f: int(re.search(r"\d+", f).group()))
           data = {}
           for f in files:
               src = open(f, encoding="utf-8").read()
-              m = cookie_re.search(src)
-              cookie = m.group(2) if m else None
+              mc = cookie_re.search(src)
+              mg = game_re.search(src)
+              cookie = mc.group(2) if mc else None
+              gameurl = mg.group(2) if mg else None
               lines = len(src.splitlines())
-              norm = cookie_re.sub(lambda mm: mm.group(1) + "<<<COOKIE>>>" + mm.group(3), src) if m else src
-              data[f] = dict(src=src, cookie=cookie, lines=lines, norm=norm)
+              norm = src
+              if mc:
+                  norm = cookie_re.sub(lambda mm: mm.group(1) + "<<<COOKIE>>>" + mm.group(3), norm)
+              if mg:
+                  norm = game_re.sub(lambda mm: mm.group(1) + "<<<GAMEURL>>>" + mm.group(3), norm)
+              norm = name_re.sub("FB <<<GAMENAME>>> reward bot v10", norm)
+              data[f] = dict(src=src, cookie=cookie, gameurl=gameurl, lines=lines, norm=norm)
 
           new_files = [f for f in files if data[f]["lines"] >= 1000]
 
@@ -57,40 +58,36 @@ jobs:
               except Exception:
                   return 0
 
-          if TEMPLATE != "auto" and TEMPLATE in data:
-              canonical = TEMPLATE
-          elif new_files:
-              canonical = max(new_files, key=last_commit)
-          else:
-              canonical = files[0]
-
+          canonical = max(new_files, key=last_commit) if new_files else files[0]
           base = data[canonical]["norm"]
+          base = base.replace("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY",
+                              "FB <<<GAMENAME>>> reward bot v10 — BATCH + ROBUST RECOVERY")
+          base = base.replace("FB Tien Len Mien Nam reward bot v10",
+                              "FB <<<GAMENAME>>> reward bot v10")
 
           report = []
-          report.append(f"SYNC-REPORT-V2 run={RUN_ID} DRY_RUN={DRY} TEMPLATE={TEMPLATE} canonical={canonical} ({data[canonical]['lines']} lines)")
+          report.append(f"SYNC-REPORT-V3 run={RUN_ID} DRY_RUN={DRY} canonical={canonical} ({data[canonical]['lines']} lines)")
           report.append("")
-          report.append("=== Files ===")
+          report.append("=== Files (per-file values kept: cookie + GAME_URL) ===")
           for f in files:
               tag = "NEW" if data[f]["lines"] >= 1000 else "OLD"
-              same = "base" if data[f]["norm"] == base else "VARIANT"
-              report.append(f"{f:10s} {tag} lines={data[f]['lines']:5d} cookie={data[f]['cookie']} {same}")
+              report.append(f"{f:10s} {tag} lines={data[f]['lines']:5d} cookie={data[f]['cookie']} game={data[f]['gameurl']}")
 
           groups = {}
-          for f in new_files:
+          for f in files:
               groups.setdefault(data[f]["norm"], []).append(f)
           report.append("")
-          report.append(f"=== Variant groups among NEW files: {len(groups)} ===")
+          report.append(f"=== Variant groups (cookie+game+name normalized): {len(groups)} ===")
           gl = sorted(groups.values(), key=len, reverse=True)
-          report.append(f"canonical group: {groups.get(base, [])}")
-          for g in gl:
-              if data[g[0]]["norm"] == base:
-                  continue
+          for i, g in enumerate(gl):
+              report.append(f"group{i} ({len(g)}): {g}")
+          if len(gl) > 1:
               diff = list(difflib.unified_diff(
-                  base.splitlines(), data[g[0]]["norm"].splitlines(),
-                  fromfile=canonical, tofile=",".join(g), lineterm=""))
+                  data[gl[0][0]]["norm"].splitlines(), data[gl[1][0]]["norm"].splitlines(),
+                  fromfile=",".join(gl[0]), tofile=",".join(gl[1]), lineterm=""))
               report.append("")
-              report.append(f"=== Diff canonical vs [{','.join(g)}] (max 40 lines) ===")
-              report.extend(diff[:40])
+              report.append("=== Diff group0 vs group1 (max 60 lines) ===")
+              report.extend(diff[:60])
 
           report.append("")
           if DRY:
@@ -99,13 +96,15 @@ jobs:
               n = 0
               for f in files:
                   cookie = data[f]["cookie"] or f.replace(".py", ".txt")
-                  new_src = base.replace("<<<COOKIE>>>", cookie)
+                  gameurl = data[f]["gameurl"] or "https://www.facebook.com/gaming/play/tienlen_miennam"
+                  gamename = gameurl.rstrip("/").split("/")[-1]
+                  new_src = base.replace("<<<COOKIE>>>", cookie).replace("<<<GAMEURL>>>", gameurl).replace("<<<GAMENAME>>>", gamename)
                   if new_src != data[f]["src"]:
                       open(f, "w", encoding="utf-8").write(new_src)
                       n += 1
-                      report.append(f"REWRITE {f}: {data[f]['lines']} -> {len(new_src.splitlines())} lines, cookie={cookie}")
+                      report.append(f"REWRITE {f}: {data[f]['lines']} -> {len(new_src.splitlines())} lines, cookie={cookie}, game={gamename}")
                   else:
-                      report.append(f"OK      {f}: unchanged, cookie={cookie}")
+                      report.append(f"OK      {f}: unchanged, cookie={cookie}, game={gamename}")
               report.append(f"Total rewritten: {n}")
 
           open("sync_report.txt", "w", encoding="utf-8").write("\n".join(report) + "\n")
@@ -117,6 +116,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Sync bots run=${GITHUB_RUN_ID} (preserve ck*.txt cookie refs)"
+            git commit -m "Sync bots to 1002-line code run=${GITHUB_RUN_ID} (keep cookie + GAME_URL per file)"
             git push
           fi
