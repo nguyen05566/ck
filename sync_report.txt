@@ -35,23 +35,375 @@ ck31.py    OLD lines=  896 cookie=ck16.txt VARIANT
 ck32.py    OLD lines=  896 cookie=ck16.txt VARIANT
 
 === Variant groups among NEW files: 16 ===
-largest group (3 files): ['ck2.py', 'ck8.py', 'ck20.py']
-other group (2 files): ['ck1.py', 'ck14.py']
-other group (2 files): ['ck7.py', 'ck23.py']
-other group (2 files): ['ck9.py', 'ck16.py']
-other group (1 files): ['ck4.py']
-other group (1 files): ['ck6.py']
-other group (1 files): ['ck10.py']
-other group (1 files): ['ck11.py']
-other group (1 files): ['ck12.py']
-other group (1 files): ['ck13.py']
-other group (1 files): ['ck15.py']
-other group (1 files): ['ck17.py']
-other group (1 files): ['ck18.py']
-other group (1 files): ['ck22.py']
-other group (1 files): ['ck24.py']
-other group (1 files): ['ck25.py']
+canonical group: ['ck1.py', 'ck14.py']
 
-=== Diff ck1.py vs ck1.py (max 150 lines) ===
+=== Diff canonical vs [ck2.py,ck8.py,ck20.py] (max 40 lines) ===
+--- ck1.py
++++ ck2.py,ck8.py,ck20.py
+@@ -38,10 +38,10 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+-
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++GAME_URL = "https://www.facebook.com/gaming/play/phom_tala"
++
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
+
+=== Diff canonical vs [ck7.py,ck23.py] (max 40 lines) ===
+--- ck1.py
++++ ck7.py,ck23.py
+@@ -38,10 +38,10 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+-
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++GAME_URL = "https://www.facebook.com/gaming/play/mystery-xiangqi"
++
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
+
+=== Diff canonical vs [ck9.py,ck16.py] (max 40 lines) ===
+--- ck1.py
++++ ck9.py,ck16.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB mystery-xiangqi reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/mystery-xiangqi"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB mystery-xiangqi reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck4.py] (max 40 lines) ===
+--- ck1.py
++++ ck4.py
+@@ -38,10 +38,10 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+-
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++GAME_URL = "https://www.facebook.com/gaming/play/maubinh_xapxam"
++
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
+
+=== Diff canonical vs [ck6.py] (max 40 lines) ===
+--- ck1.py
++++ ck6.py
+@@ -38,10 +38,10 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+-
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++GAME_URL = "https://www.facebook.com/gaming/play/chinese-chess-vh"
++
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
+
+=== Diff canonical vs [ck10.py] (max 40 lines) ===
+--- ck1.py
++++ ck10.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB gomoku-vh reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/gomoku-vh"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB gomoku-vh reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck11.py] (max 40 lines) ===
+--- ck1.py
++++ ck11.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB maubinh_xapxam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/maubinh_xapxam"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB maubinh_xapxam reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck12.py] (max 40 lines) ===
+--- ck1.py
++++ ck12.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB phom_tala reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/phom_tala"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB phom_tala reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck13.py] (max 40 lines) ===
+--- ck1.py
++++ ck13.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB chinese-chess-vh reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/chinese-chess-vh"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB chinese-chess-vh reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck15.py] (max 40 lines) ===
+--- ck1.py
++++ ck15.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB mystery-xiangqi reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/phom_tala"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB mystery-xiangqi reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck17.py] (max 40 lines) ===
+--- ck1.py
++++ ck17.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB mystery-xiangqi reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/maubinh_xapxam"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB mystery-xiangqi reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck18.py] (max 40 lines) ===
+--- ck1.py
++++ ck18.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ """
+-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
++FB mystery-xiangqi reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+ 
+ Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
+   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
+@@ -38,7 +38,7 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
++GAME_URL = "https://www.facebook.com/gaming/play/gomoku-vh"
+ 
+ CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+ DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
+@@ -907,7 +907,7 @@
+ # ============================================================
+ def main():
+     log("=" * 64)
+-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
++    log("FB mystery-xiangqi reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+     log("=" * 64)
+     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
+         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
+
+=== Diff canonical vs [ck22.py] (max 40 lines) ===
+--- ck1.py
++++ ck22.py
+@@ -38,10 +38,10 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+-
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++GAME_URL = "https://www.facebook.com/gaming/play/chines-chess-vh"
++
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
+
+=== Diff canonical vs [ck24.py] (max 40 lines) ===
+--- ck1.py
++++ ck24.py
+@@ -38,10 +38,10 @@
+ # ============================================================
+ # CONFIG
+ # ============================================================
+-GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+-
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++GAME_URL = "https://www.facebook.com/gaming/play/gomoku-vh"
++
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
+
+=== Diff canonical vs [ck25.py] (max 40 lines) ===
+--- ck1.py
++++ ck25.py
+@@ -40,8 +40,8 @@
+ # ============================================================
+ GAME_URL = "https://www.facebook.com/gaming/play/tienlen_miennam"
+ 
+-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
++CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
++DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
+ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
+ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
 
 === DRY RUN — no bot file changed ===
