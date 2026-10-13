@@ -24,8 +24,10 @@
   D) Daily quota / state file:
      Theo dõi số claim / số transfer / số xu đã transfer mỗi ngày cho mỗi cookie.
      Vượt MAX_CLAIMS_PER_DAY → tự dừng, tránh spam server.
-     (v2) Ghi state AN TOÀN: file-lock + atomic write → nhiều nick chạy song
-     song không còn ghi đè mất quota của nhau.
+     (v2) Ghi state AN TOÀN: file-lock + atomic write.
+     (v3) SHARDING PER-BOT: state/<cookie>.state.json + fingerprints/<cookie>.fp.json
+     — mỗi bot ghi file CỦA MÌNH, không còn file gộp/lock toàn cục → chạy 100+
+     bot song song vẫn O(1)/lần ghi, không tranh chấp, không mất quota của nhau.
 
   E) Soft-ban detection:
      Phát hiện keyword "rate limit" / "too many requests" / "tạm thời" / "khóa"
@@ -221,49 +223,74 @@ def _file_lock(path: str):
                 pass
 
 
+# ---- (v3) SHARDING PER-BOT: mỗi bot 1 file riêng → 100+ bot không tranh chấp ----
+def _bot_id(cookie_file: str) -> str:
+    """'ck1.txt' → 'ck1.txt' (lọc ký tự lạ để làm tên file an toàn)."""
+    return re.sub(r"[^\w.\-]", "_", os.path.basename(cookie_file or "unknown"))
+
+
+def _fp_path(cookie_file: str) -> str:
+    """File fingerprint RIÊNG của 1 bot: fingerprints/<cookie>.fp.json"""
+    return os.path.join(FP_DIR, _bot_id(cookie_file) + ".fp.json")
+
+
+def _bot_state_path(cookie_file: str) -> str:
+    """File state RIÊNG của 1 bot: state/<cookie>.state.json"""
+    return os.path.join(STATE_DIR, _bot_id(cookie_file) + ".state.json")
+
+
 def get_or_create_fingerprint(cookie_file: str) -> dict:
-    """Trả về fingerprint cố định cho 1 cookie file. Tự sinh + lưu nếu chưa có."""
+    """Trả về fingerprint cố định cho 1 cookie file. Tự sinh + lưu nếu chưa có.
+
+    (v3) Lưu PER-BOT (fingerprints/<cookie>.fp.json) thay vì 1 file gộp
+    fingerprint.json: 100 bot không đụng chung 1 file → không lock toàn cục,
+    không race, mỗi lần ghi chỉ 1 file nhỏ (O(1) theo số bot). Tự migrate
+    fingerprint cũ từ file gộp nếu có.
+    """
     os.makedirs(FP_DIR, exist_ok=True)
-    fp_path = os.path.join(FP_DIR, "fingerprint.json")
-
     key = os.path.basename(cookie_file)
+    fp_path = _fp_path(cookie_file)
+
+    # Lock per-bot — chỉ tranh chấp nếu cùng 1 bot chạy 2 process, không liên
+    # quan tới số lượng bot khác → scale vô hạn.
     with _file_lock(fp_path):
-        fingerprints = _read_json(fp_path, {})
-        if not isinstance(fingerprints, dict):
-            fingerprints = {}
-
+        fp = _read_json(fp_path, None)
         dirty = False
-        if key not in fingerprints:
-            ua = random.choice(USER_AGENTS)
-            vendor, renderer = random.choice(WEBGL_VENDORS)
-            locale, timezone = random.choice(COHERENT_LOCALE_TZ)
-            viewport = random.choice(VIEWPORTS)
-            fingerprints[key] = {
-                "user_agent":   ua,
-                "viewport":     viewport,
-                "locale":       locale,
-                "timezone":     timezone,
-                "platform":     _platform_for(ua),
-                "webgl_vendor": vendor,
-                "webgl_renderer": renderer,
-                "hardware_concurrency": random.choice([4, 8, 8, 12, 16]),
-                "device_memory": random.choice([4, 8, 8, 16]),
-                "color_scheme": random.choice(["light", "light", "dark"]),
-                "accept_language": _accept_language(locale),
-                "screen":       _screen_for(viewport),
-                "created_at":   time.strftime("%Y-%m-%d %H:%M:%S"),
-            }
+
+        if not isinstance(fp, dict) or not fp:
+            # migrate từ file gộp cũ (v1/v2) nếu có
+            legacy = _read_json(os.path.join(FP_DIR, "fingerprint.json"), {})
+            fp = legacy.get(key) if isinstance(legacy, dict) else None
+            if not isinstance(fp, dict):
+                ua = random.choice(USER_AGENTS)
+                vendor, renderer = random.choice(WEBGL_VENDORS)
+                locale, timezone = random.choice(COHERENT_LOCALE_TZ)
+                viewport = random.choice(VIEWPORTS)
+                fp = {
+                    "user_agent":   ua,
+                    "viewport":     viewport,
+                    "locale":       locale,
+                    "timezone":     timezone,
+                    "platform":     _platform_for(ua),
+                    "webgl_vendor": vendor,
+                    "webgl_renderer": renderer,
+                    "hardware_concurrency": random.choice([4, 8, 8, 12, 16]),
+                    "device_memory": random.choice([4, 8, 8, 16]),
+                    "color_scheme": random.choice(["light", "light", "dark"]),
+                    "accept_language": _accept_language(locale),
+                    "screen":       _screen_for(viewport),
+                    "created_at":   time.strftime("%Y-%m-%d %H:%M:%S"),
+                }
             dirty = True
-        else:
-            completed = _normalize_fp(dict(fingerprints[key]))
-            if completed != fingerprints[key]:
-                fingerprints[key] = completed
-                dirty = True
 
+        completed = _normalize_fp(dict(fp))
+        if completed != fp:
+            fp = completed
+            dirty = True
         if dirty:
-            _atomic_write_json(fp_path, fingerprints)
+            _atomic_write_json(fp_path, fp)
 
-    return fingerprints[key]
+    return fp
 
 
 # =====================================================================
@@ -430,9 +457,27 @@ def random_batch_size(base: int = 40, lo: int = 25, hi: int = 55) -> int:
     return max(5, min(hi, max(lo, val)))
 
 
+def bot_concurrency() -> int:
+    """Số bot dự kiến chạy song song (env BOT_COUNT / CONCURRENCY / N_BOTS, mặc định 8)."""
+    for env in ("BOT_COUNT", "CONCURRENCY", "N_BOTS"):
+        v = os.environ.get(env)
+        try:
+            if v and int(v) > 0:
+                return int(v)
+        except Exception:
+            pass
+    return 8
+
+
 def random_session_offset(max_s: int = 180) -> float:
-    """Sleep 0..max_s giây trước khi mở session đầu tiên."""
-    wait = random.uniform(0, max_s)
+    """Sleep 0..max_s giây trước khi mở session đầu tiên.
+
+    (v3) Tự NỚI RỘNG cửa sổ theo số bot: ~12s/bot (100 bot → ~1200s spread)
+    để 100 browser không "đồng loạt" bật lên cùng lúc. Set env BOT_COUNT để
+    chỉnh; min = max_s, max = 3600s.
+    """
+    spread = max(max_s, min(3600, bot_concurrency() * 12))
+    wait = random.uniform(0, spread)
     time.sleep(wait)
     return wait
 
@@ -489,7 +534,7 @@ DEFAULT_MAX_CLAIMS_PER_DAY    = 180   # ~3 batch x 40 + buffer
 DEFAULT_MAX_TRANSFERS_PER_DAY = 30
 DEFAULT_MAX_TRANSFER_AMOUNT   = 2_000_000  # tổng xu transfer/ngày/cookie
 
-_STATE_FILE = os.path.join(STATE_DIR, "daily_state.json")
+_STATE_FILE = os.path.join(STATE_DIR, "daily_state.json")  # legacy (v2) file gộp — giờ CHỈ đọc để migrate
 
 
 def _today() -> str:
@@ -509,51 +554,71 @@ def _fresh_state() -> dict:
     }
 
 
+def _load_entry_locked(path: str, cookie_file: str):
+    """Đọc entry state (KHI ĐÃ giữ lock per-bot). Trả về (entry, dirty).
+
+    - Tự migrate từ daily_state.json (file gộp cũ) nếu bot chưa có file riêng.
+    - Tự bổ sung field mới (_fresh_state) cho state tạo bởi phiên bản trước.
+    """
+    entry = _read_json(path, None)
+    dirty = False
+    if not isinstance(entry, dict):
+        legacy = _read_json(_STATE_FILE, {})
+        entry = legacy.get(os.path.basename(cookie_file)) if isinstance(legacy, dict) else None
+        dirty = True
+    if not isinstance(entry, dict) or entry.get("date") != _today():
+        entry = _fresh_state()
+        dirty = True
+    else:
+        completed = dict(_fresh_state())
+        completed.update(entry)
+        if completed != entry:
+            entry = completed
+            dirty = True
+    return entry, dirty
+
+
 def load_daily_state(cookie_file: str) -> dict:
+    """(v3) Đọc state PER-BOT: state/<cookie>.state.json.
+
+    100 bot mỗi đứa 1 file riêng → không tranh chấp, không lock toàn cục,
+    đọc/ghi chỉ 1 file nhỏ → O(1) bất kể số lượng bot.
+    """
     os.makedirs(STATE_DIR, exist_ok=True)
-    key = os.path.basename(cookie_file)
-    with _file_lock(_STATE_FILE):
-        states = _read_json(_STATE_FILE, {})
-        if not isinstance(states, dict):
-            states = {}
-        entry = states.get(key)
-        if not isinstance(entry, dict) or entry.get("date") != _today():
-            entry = _fresh_state()
-            states[key] = entry
-            _atomic_write_json(_STATE_FILE, states)
+    path = _bot_state_path(cookie_file)
+    with _file_lock(path):
+        entry, dirty = _load_entry_locked(path, cookie_file)
+        if dirty:
+            _atomic_write_json(path, entry)
     return entry
 
 
 def _save_state(state_path: str, states: dict):
+    """Giữ tên cũ để tương thích — ghi atomic (dùng cho tool/migration bên ngoài)."""
     _atomic_write_json(state_path, states)
 
 
 def save_daily_state(cookie_file: str, state: dict):
+    """(v3) Ghi state vào FILE PER-BOT — không đụng bot nào khác."""
     os.makedirs(STATE_DIR, exist_ok=True)
-    key = os.path.basename(cookie_file)
-    with _file_lock(_STATE_FILE):
-        states = _read_json(_STATE_FILE, {})
-        if not isinstance(states, dict):
-            states = {}
-        states[key] = state
-        _atomic_write_json(_STATE_FILE, states)
+    path = _bot_state_path(cookie_file)
+    with _file_lock(path):
+        _atomic_write_json(path, state)
 
 
 def _update_state(cookie_file: str, mutate) -> dict:
-    """(v2) Read-modify-write NGUYÊN TỬ dưới lock — an toàn khi chạy song song."""
+    """(v3) Read-modify-write NGUYÊN TỬ trên FILE PER-BOT.
+
+    Lock chỉ trong phạm vi 1 bot → 100 bot chạy song song KHÔNG chờ nhau,
+    không còn nút cổ chai 1 file gộp như v2.
+    """
     os.makedirs(STATE_DIR, exist_ok=True)
-    key = os.path.basename(cookie_file)
-    with _file_lock(_STATE_FILE):
-        states = _read_json(_STATE_FILE, {})
-        if not isinstance(states, dict):
-            states = {}
-        entry = states.get(key)
-        if not isinstance(entry, dict) or entry.get("date") != _today():
-            entry = _fresh_state()
+    path = _bot_state_path(cookie_file)
+    with _file_lock(path):
+        entry, _ = _load_entry_locked(path, cookie_file)
         entry = dict(entry)
         mutate(entry)
-        states[key] = entry
-        _atomic_write_json(_STATE_FILE, states)
+        _atomic_write_json(path, entry)
     return entry
 
 
@@ -622,6 +687,45 @@ def clear_soft_ban(cookie_file: str):
         st["soft_ban_until"] = 0
         st["soft_ban_streak"] = 0
     _update_state(cookie_file, _m)
+
+
+# ---- (v3) Giám sát 100+ bot: quét thư mục, KHÔNG cần file gộp, KHÔNG lock ----
+def load_all_states() -> dict:
+    """Trả về {cookie_file: state} của TẤT CẢ bot (quét state/*.state.json).
+
+    Không lock, không file gộp → an toàn chạy song song với 100 bot đang ghi.
+    """
+    out = {}
+    legacy = _read_json(_STATE_FILE, {})        # file gộp cũ (nếu còn)
+    if isinstance(legacy, dict):
+        for k, v in legacy.items():
+            if not k.startswith("_") and isinstance(v, dict):
+                out[k] = v
+    try:
+        names = sorted(os.listdir(STATE_DIR))
+    except Exception:
+        names = []
+    suffix = ".state.json"
+    for name in names:
+        if not name.endswith(suffix) or name.endswith(".lock"):
+            continue
+        st = _read_json(os.path.join(STATE_DIR, name), None)
+        if isinstance(st, dict):
+            out[name[:-len(suffix)]] = st
+    return out
+
+
+def summarize_states() -> dict:
+    """Tổng hợp nhanh toàn bộ bot: tổng claim/transfer/xu, số bot đang soft-ban."""
+    states = load_all_states()
+    now = time.time()
+    return {
+        "bots":               len(states),
+        "claims_today":       sum(int(s.get("claims_today", 0)) for s in states.values()),
+        "transfers_today":    sum(int(s.get("transfers_today", 0)) for s in states.values()),
+        "amount_transferred": sum(int(s.get("amount_transferred", 0)) for s in states.values()),
+        "soft_banned_now":    sum(1 for s in states.values() if s.get("soft_ban_until", 0) > now),
+    }
 
 
 # =====================================================================
@@ -847,4 +951,12 @@ if __name__ == "__main__":
     print("  HTML dài chứa 'rate limit' + 'blocked'  →", detect_soft_ban("<html>rate limit " + "x" * 2000 + " account has been blocked</html>"))
     print("  None                                  →", detect_soft_ban(None))
     print("\nrandom_batch_size(40) mẫu:", [random_batch_size(40) for _ in range(5)])
+    print("\n--- (v3) Per-bot sharding ---")
+    print("  fp path   :", _fp_path("ck_test.txt"))
+    print("  state path:", _bot_state_path("ck_test.txt"))
+    record_claim("ck_test.txt")
+    print("  load_daily_state:", load_daily_state("ck_test.txt"))
+    print("  summarize_states:", summarize_states())
+    print("  load_all_states keys:", list(load_all_states().keys()))
+    print("  bot_concurrency:", bot_concurrency())
     print("\n=== OK ===")
