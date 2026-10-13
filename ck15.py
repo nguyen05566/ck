@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FB mystery-xiangqi reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY (anti-ban)
+FB phom_tala reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
 
 Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
@@ -907,7 +907,7 @@ def run_session(p, fb_cookies, session_id, started_at):
 # ============================================================
 def main():
     log("=" * 64)
-    log("FB mystery-xiangqi reward bot v10 — BATCH + ROBUST RECOVERY (anti-ban)")
+    log("FB phom_tala reward bot v10 — BATCH + ROBUST RECOVERY")
     log("=" * 64)
     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")

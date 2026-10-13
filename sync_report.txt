@@ -1,4 +1,4 @@
-SYNC-REPORT-V3 run=38365675410 DRY_RUN=True canonical=ck1.py (1002 lines)
+SYNC-REPORT-V3 run=38365795673 DRY_RUN=False canonical=ck1.py (1002 lines)
 
 === Files (per-file values kept: cookie + GAME_URL) ===
 ck1.py     NEW lines= 1002 cookie=ck1.txt game=https://www.facebook.com/gaming/play/tienlen_miennam
@@ -102,4 +102,36 @@ group3 (2): ['ck1.py', 'ck14.py']
 -# Transfer xu về hub account sau mỗi CLAIM_BATCH lần claim
 +
 
-=== DRY RUN — no bot file changed ===
+REWRITE ck1.py: 1002 -> 1002 lines, cookie=ck1.txt, game=tienlen_miennam
+REWRITE ck2.py: 1002 -> 1002 lines, cookie=ck2.txt, game=phom_tala
+REWRITE ck3.py: 896 -> 1002 lines, cookie=ck3.txt, game=maubinh_xapxam
+REWRITE ck4.py: 1002 -> 1002 lines, cookie=ck11.txt, game=maubinh_xapxam
+REWRITE ck5.py: 896 -> 1002 lines, cookie=ck5.txt, game=gomoku-vh
+REWRITE ck6.py: 1002 -> 1002 lines, cookie=ck6.txt, game=chinese-chess-vh
+REWRITE ck7.py: 1002 -> 1002 lines, cookie=ck7.txt, game=mystery-xiangqi
+REWRITE ck8.py: 1002 -> 1002 lines, cookie=ck8.txt, game=phom_tala
+REWRITE ck9.py: 1002 -> 1002 lines, cookie=ck9.txt, game=mystery-xiangqi
+REWRITE ck10.py: 1002 -> 1002 lines, cookie=ck10.txt, game=gomoku-vh
+REWRITE ck11.py: 1002 -> 1002 lines, cookie=ck11.txt, game=maubinh_xapxam
+REWRITE ck12.py: 1002 -> 1002 lines, cookie=ck12.txt, game=phom_tala
+REWRITE ck13.py: 1002 -> 1002 lines, cookie=ck13.txt, game=chinese-chess-vh
+REWRITE ck14.py: 1002 -> 1002 lines, cookie=ck14.txt, game=tienlen_miennam
+REWRITE ck15.py: 1002 -> 1002 lines, cookie=ck14.txt, game=phom_tala
+REWRITE ck16.py: 1002 -> 1002 lines, cookie=ck14.txt, game=mystery-xiangqi
+REWRITE ck17.py: 1002 -> 1002 lines, cookie=ck14.txt, game=maubinh_xapxam
+REWRITE ck18.py: 1002 -> 1002 lines, cookie=ck14.txt, game=gomoku-vh
+REWRITE ck19.py: 896 -> 1002 lines, cookie=ck14.txt, game=chinese-chess-vh
+REWRITE ck20.py: 1002 -> 1002 lines, cookie=ck15.txt, game=phom_tala
+REWRITE ck21.py: 896 -> 1002 lines, cookie=ck15.txt, game=maubinh_xapxam
+REWRITE ck22.py: 1002 -> 1002 lines, cookie=ck15.txt, game=chines-chess-vh
+REWRITE ck23.py: 1002 -> 1002 lines, cookie=ck15.txt, game=mystery-xiangqi
+REWRITE ck24.py: 1002 -> 1002 lines, cookie=ck15.txt, game=gomoku-vh
+REWRITE ck25.py: 1002 -> 1002 lines, cookie=ck15.txt, game=tienlen_miennam
+REWRITE ck26.py: 896 -> 1002 lines, cookie=ck16.txt, game=maubinh_xapxam
+REWRITE ck27.py: 896 -> 1002 lines, cookie=ck16.txt, game=tienlen_miennam
+REWRITE ck28.py: 896 -> 1002 lines, cookie=ck16.txt, game=phom_tala
+REWRITE ck29.py: 896 -> 1002 lines, cookie=ck16.txt, game=sam_loc_vh
+REWRITE ck30.py: 896 -> 1002 lines, cookie=ck16.txt, game=gomoku-vh
+REWRITE ck31.py: 896 -> 1002 lines, cookie=ck16.txt, game=mystery-xiangqi
+REWRITE ck32.py: 896 -> 1002 lines, cookie=ck16.txt, game=chess-vh
+Total rewritten: 32

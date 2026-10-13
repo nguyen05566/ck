@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FB Tien Len Mien Nam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
+FB maubinh_xapxam reward bot v10 — BATCH TRANSFER + ROBUST RECOVERY
 
 Khác biệt so với v9 (sửa lỗi lặp vô hạn "frame not found" / "ws disconnect"):
   1. GameSession bọc page + frame: mọi evaluate() đi qua .eval(), tự dò lại frame
@@ -40,8 +40,8 @@ from playwright.sync_api import sync_playwright
 # ============================================================
 GAME_URL = "https://www.facebook.com/gaming/play/maubinh_xapxam"
 
-CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer
-DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim
+CLAIM_BATCH   = int(os.environ.get("CLAIM_BATCH", "40"))          # claim bao nhiêu lần rồi transfer (sẽ jitter xung giá trị này)
+DELAY         = float(os.environ.get("COOLDOWN", "3"))            # nghỉ giữa 2 lần claim (sẽ jitter thêm)
 REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữa 2 session
 MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
 HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
@@ -907,7 +907,7 @@ def run_session(p, fb_cookies, session_id, started_at):
 # ============================================================
 def main():
     log("=" * 64)
-    log("FB Tien Len Mien Nam reward bot v10 — BATCH + ROBUST RECOVERY")
+    log("FB maubinh_xapxam reward bot v10 — BATCH + ROBUST RECOVERY")
     log("=" * 64)
     log(f"Config: CLAIM_BATCH={CLAIM_BATCH} COOLDOWN={DELAY}s REST={REST}s "
         f"MAX_RUNTIME={MAX_RUNTIME}s TRANSFER_DEST={TRANSFER_DEST_ID}")
