@@ -63,18 +63,17 @@ for f in new_files:
     groups.setdefault(data[f]["norm"], []).append(f)
 report.append("")
 report.append(f"=== Variant groups among NEW files: {len(groups)} ===")
-if len(groups) > 1:
-    gl = sorted(groups.values(), key=len, reverse=True)
-    report.append(f"largest group ({len(gl[0])} files): {gl[0]}")
-    for g in gl[1:]:
-        report.append(f"other group ({len(g)} files): {g}")
-    other = gl[1][0]
+gl = sorted(groups.values(), key=len, reverse=True)
+report.append(f"canonical group: {groups.get(base, [])}")
+for g in gl:
+    if data[g[0]]["norm"] == base:
+        continue
     diff = list(difflib.unified_diff(
-        data[canonical]["norm"].splitlines(), data[other]["norm"].splitlines(),
-        fromfile=canonical, tofile=other, lineterm=""))
+        base.splitlines(), data[g[0]]["norm"].splitlines(),
+        fromfile=canonical, tofile=",".join(g), lineterm=""))
     report.append("")
-    report.append(f"=== Diff {canonical} vs {other} (max 150 lines) ===")
-    report.extend(diff[:150])
+    report.append(f"=== Diff canonical vs [{','.join(g)}] (max 40 lines) ===")
+    report.extend(diff[:40])
 
 report.append("")
 if DRY:
