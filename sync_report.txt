@@ -1,0 +1,57 @@
+DRY_RUN=True TEMPLATE=auto canonical=ck1.py (1002 lines)
+
+=== Files ===
+ck1.py     NEW lines= 1002 cookie=ck1.txt base
+ck2.py     NEW lines= 1002 cookie=ck2.txt VARIANT
+ck3.py     OLD lines=  896 cookie=ck3.txt VARIANT
+ck4.py     NEW lines= 1002 cookie=ck11.txt VARIANT
+ck5.py     OLD lines=  896 cookie=ck5.txt VARIANT
+ck6.py     NEW lines= 1002 cookie=ck6.txt VARIANT
+ck7.py     NEW lines= 1002 cookie=ck7.txt VARIANT
+ck8.py     NEW lines= 1002 cookie=ck8.txt VARIANT
+ck9.py     NEW lines= 1002 cookie=ck9.txt VARIANT
+ck10.py    NEW lines= 1002 cookie=ck10.txt VARIANT
+ck11.py    NEW lines= 1002 cookie=ck11.txt VARIANT
+ck12.py    NEW lines= 1002 cookie=ck12.txt VARIANT
+ck13.py    NEW lines= 1002 cookie=ck13.txt VARIANT
+ck14.py    NEW lines= 1002 cookie=ck14.txt base
+ck15.py    NEW lines= 1002 cookie=ck14.txt VARIANT
+ck16.py    NEW lines= 1002 cookie=ck14.txt VARIANT
+ck17.py    NEW lines= 1002 cookie=ck14.txt VARIANT
+ck18.py    NEW lines= 1002 cookie=ck14.txt VARIANT
+ck19.py    OLD lines=  896 cookie=ck14.txt VARIANT
+ck20.py    NEW lines= 1002 cookie=ck15.txt VARIANT
+ck21.py    OLD lines=  896 cookie=ck15.txt VARIANT
+ck22.py    NEW lines= 1002 cookie=ck15.txt VARIANT
+ck23.py    NEW lines= 1002 cookie=ck15.txt VARIANT
+ck24.py    NEW lines= 1002 cookie=ck15.txt VARIANT
+ck25.py    NEW lines= 1002 cookie=ck15.txt VARIANT
+ck26.py    OLD lines=  896 cookie=ck16.txt VARIANT
+ck27.py    OLD lines=  896 cookie=ck16.txt VARIANT
+ck28.py    OLD lines=  896 cookie=ck16.txt VARIANT
+ck29.py    OLD lines=  896 cookie=ck16.txt VARIANT
+ck30.py    OLD lines=  896 cookie=ck16.txt VARIANT
+ck31.py    OLD lines=  896 cookie=ck16.txt VARIANT
+ck32.py    OLD lines=  896 cookie=ck16.txt VARIANT
+
+=== Variant groups among NEW files: 16 ===
+largest group (3 files): ['ck2.py', 'ck8.py', 'ck20.py']
+other group (2 files): ['ck1.py', 'ck14.py']
+other group (2 files): ['ck7.py', 'ck23.py']
+other group (2 files): ['ck9.py', 'ck16.py']
+other group (1 files): ['ck4.py']
+other group (1 files): ['ck6.py']
+other group (1 files): ['ck10.py']
+other group (1 files): ['ck11.py']
+other group (1 files): ['ck12.py']
+other group (1 files): ['ck13.py']
+other group (1 files): ['ck15.py']
+other group (1 files): ['ck17.py']
+other group (1 files): ['ck18.py']
+other group (1 files): ['ck22.py']
+other group (1 files): ['ck24.py']
+other group (1 files): ['ck25.py']
+
+=== Diff ck1.py vs ck1.py (max 150 lines) ===
+
+=== DRY RUN — no bot file changed ===
