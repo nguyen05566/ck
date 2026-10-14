@@ -39,7 +39,7 @@ jobs:
           COOLDOWN: '3'
           REST_BETWEEN_RUNS: '5'
           MAX_RUNTIME: '21000'   # 5h50m, để 10 phút buffer trước khi timeout 6h
-          TRANSFER_DEST_ID: '58411863'
+          TRANSFER_DEST_ID: '71394255'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'   # game chặn claim khi balance >55k
           MAX_CLAIMS_PER_DAY: '120'                # quota chống spam (mặc định 180)
