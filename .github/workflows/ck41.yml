@@ -1,0 +1,94 @@
+name: ck41
+
+# === CHẠY LIÊN TỤC, KHÔNG CÁCH KHOẢNG ===
+# Cron mỗi 6h làm trigger dự phòng; auto-restart ở cuối job sẽ trigger lại
+# ngay lập tức khi bot chạy xong -> không có kẽ hở giữa 2 phiên.
+# Concurrency + cancel-in-progress: false -> phiên sau xếp hàng chờ, không chồng.
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write   # cho phép gh CLI trigger lại chính workflow này
+  contents: read
+
+concurrency:
+  group: ck41-run
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # max 6h trên GitHub-hosted runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright websocket-client
+          playwright install chromium --with-deps
+
+      - name: Run bot (with bash retry loop, ~5h50m)
+        env:
+          MAX_CLAIMS: '40'
+          HEADLESS: 'true'
+          COOLDOWN: '3'
+          REST_BETWEEN_RUNS: '5'
+          MAX_RUNTIME: '21000'   # 5h50m, để 10 phút buffer trước khi timeout 6h
+          TRANSFER_DEST_ID: '17692951'
+          TRANSFER_ENABLED: 'true'
+          PRE_CLAIM_TRANSFER_THRESHOLD: '50000'   # game chặn claim khi balance >55k
+          MAX_CLAIMS_PER_DAY: '120'                # quota chống spam (mặc định 180)
+          MAX_TRANSFERS_PER_DAY: '20'              # quota transfer/ngày
+          SESSION_START_JITTER: '180'              # random 0-3 phút trước khi mở browser
+          IDLE_EVERY_CLAIMS: '40'                  # mỗi 40 claim nghỉ 30-90s giả lập người
+        run: |
+          set +e
+          END_TIME=$(( $(date +%s) + ${MAX_RUNTIME} ))
+          ATTEMPT=0
+          while [ $(date +%s) -lt $END_TIME ]; do
+            ATTEMPT=$((ATTEMPT+1))
+            REMAIN=$(( END_TIME - $(date +%s) ))
+            echo "=== [$(date '+%H:%M:%S')] Attempt #$ATTEMPT — $REMAIN s remaining ==="
+            START=$(date +%s)
+            python3 ck41.py
+            EXIT=$?
+            DUR=$(( $(date +%s) - START ))
+            echo "=== [$(date '+%H:%M:%S')] Bot exited code=$EXIT after ${DUR}s ==="
+            REMAIN=$(( END_TIME - $(date +%s) ))
+            if [ $REMAIN -le 30 ]; then
+              echo "Time up — stopping retry loop."
+              break
+            fi
+            echo "Sleeping 60s before retry..."
+            sleep 60
+          done
+          exit 0
+
+      - name: Show log
+        if: always()
+        run: |
+          echo "=== Bot log ==="
+          cat loop.log 2>/dev/null || echo "(no log)"
+
+      - name: Upload debug screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-ck41
+          path: /tmp/debug_*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Auto-restart (continuous loop)
+        if: false  # disabled — re-enable by setting back to 'always()'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 5
+          echo "Triggering next ck1 run..."
+          gh workflow run ck1.yml --ref "$GITHUB_REF" || echo "(restart failed)"
