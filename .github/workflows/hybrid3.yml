@@ -1,0 +1,169 @@
+name: hybrid-parallel3
+
+# ============================================================
+# HYBRID PARALLELISM — 40 bot chia 2 nhóm transfer ID
+# ============================================================
+# Nhóm A (g1-g5): transfer về 65116508
+# Nhóm B (g6-g10): transfer về 71937024
+# ============================================================
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    concurrency:
+      group: hybrid-${{ matrix.group }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        include:
+          # ===== NHÓM A: transfer về 65116508 =====
+          - group: g1
+            bots: "ck1.py ck2.py ck3.py ck5.py"
+            bot_count: 4
+            transfer_dest: "65116508"
+          - group: g2
+            bots: "ck6.py ck7.py ck8.py ck9.py ck10.py"
+            bot_count: 5
+            transfer_dest: "65116508"
+          - group: g3
+            bots: "ck12.py ck13.py ck14.py ck15.py ck16.py"
+            bot_count: 5
+            transfer_dest: "65116508"
+          - group: g4
+            bots: "ck17.py ck18.py ck19.py ck20.py ck21.py"
+            bot_count: 5
+            transfer_dest: "65116508"
+          - group: g5
+            bots: "ck23.py ck24.py ck25.py ck26.py"
+            bot_count: 4
+            transfer_dest: "65116508"
+          
+          # ===== NHÓM B: transfer về 71937024 =====
+          - group: g6
+            bots: "ck27.py ck28.py ck29.py ck30.py"
+            bot_count: 4
+            transfer_dest: "71937024"
+          - group: g7
+            bots: "ck31.py ck32.py ck33.py ck34.py"
+            bot_count: 4
+            transfer_dest: "71937024"
+          - group: g8
+            bots: "ck35.py ck36.py ck38.py"
+            bot_count: 3
+            transfer_dest: "71937024"
+          - group: g9
+            bots: "ck41.py ck42.py"
+            bot_count: 2
+            transfer_dest: "71937024"
+          - group: g10
+            bots: "ck43.py ck44.py ck45.py ck46.py"
+            bot_count: 4
+            transfer_dest: "71937024"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright websocket-client
+          playwright install chromium --with-deps
+
+      - name: Print group info
+        run: |
+          echo "=== Group: ${{ matrix.group }} ==="
+          echo "Bots (${{ matrix.bot_count }}): ${{ matrix.bots }}"
+          echo "Transfer Dest: ${{ matrix.transfer_dest }}"
+          echo "Runner: $(nproc) vCPU, $(free -g | awk '/^Mem/' | awk '{print $2}') GB RAM"
+
+      - name: Run bots in parallel (Hybrid Parallelism)
+        env:
+          MAX_CLAIMS: '40'
+          HEADLESS: 'true'
+          COOLDOWN: '3'
+          REST_BETWEEN_RUNS: '5'
+          MAX_RUNTIME: '21000'
+          TRANSFER_DEST_ID: ${{ matrix.transfer_dest }}
+          TRANSFER_ENABLED: 'true'
+          PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
+          MAX_CLAIMS_PER_DAY: '120'
+          MAX_TRANSFERS_PER_DAY: '20'
+          SESSION_START_JITTER: '180'
+          IDLE_EVERY_CLAIMS: '40'
+          GROUP_BOTS: ${{ matrix.bots }}
+        run: |
+          set +e
+          mkdir -p /tmp/bot_logs
+
+          run_bot() {
+            local bot="$1"
+            local name="${bot%.py}"
+            local LOG="/tmp/bot_logs/${name}.log"
+
+            (
+              END_TIME=$(( $(date +%s) + ${MAX_RUNTIME} ))
+              ATTEMPT=0
+              while [ $(date +%s) -lt $END_TIME ]; do
+                ATTEMPT=$((ATTEMPT+1))
+                REMAIN=$(( END_TIME - $(date +%s) ))
+                echo "=== [$name] [$(date '+%H:%M:%S')] Attempt #$ATTEMPT — ${REMAIN}s left ==="
+                echo "=== [$name] Transfer Dest: ${TRANSFER_DEST_ID} ==="
+                START=$(date +%s)
+                python3 "$bot"
+                EXIT=$?
+                DUR=$(( $(date +%s) - START ))
+                echo "=== [$name] [$(date '+%H:%M:%S')] exit=$EXIT after ${DUR}s ==="
+                REMAIN=$(( END_TIME - $(date +%s) ))
+                if [ $REMAIN -le 30 ]; then
+                  echo "[$name] Time up — stopping retry loop."
+                  break
+                fi
+                echo "[$name] Sleeping 60s before retry..."
+                sleep 60
+              done
+            ) > "$LOG" 2>&1
+          }
+
+          PIDS=()
+          for bot in $GROUP_BOTS; do
+            name="${bot%.py}"
+            echo "[$(date '+%H:%M:%S')] Starting $bot -> /tmp/bot_logs/${name}.log (dest: ${TRANSFER_DEST_ID})"
+            run_bot "$bot" &
+            PIDS+=($!)
+            sleep 12
+          done
+
+          echo "Waiting for all bots to finish..."
+          for PID in "${PIDS[@]}"; do
+            wait $PID
+          done
+
+          echo "=== FINAL LOGS ==="
+          for f in /tmp/bot_logs/*.log; do
+            echo "--- $f ---"
+            tail -20 "$f"
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-logs-${{ matrix.group }}
+          path: /tmp/bot_logs/
+          retention-days: 3
