@@ -9,33 +9,102 @@ env:
   PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
 
 jobs:
-  run-bots:
+  run-bot-1:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck1.py 2>&1 || true
 
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+  run-bot-2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck2.py 2>&1 || true
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install playwright
-          playwright install chromium
-          pip install psutil websocket-client requests
+  run-bot-3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck3.py 2>&1 || true
 
-      - name: Run bots sequentially
-        env:
-          TRANSFER_DEST_ID: '17692951'
-          MAX_RUNTIME: '21000'
-        run: |
-          BOTS="ck1.py ck2.py ck3.py ck4.py ck5.py ck6.py ck7.py ck8.py ck9.py ck10.py"
-          for BOT in $BOTS; do
-            echo "=== Running $BOT ==="
-            timeout 3500 python -u "$BOT" 2>&1 || echo "$BOT finished"
-            echo "---"
-          done
+  run-bot-4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck4.py 2>&1 || true
+
+  run-bot-5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck5.py 2>&1 || true
+
+  run-bot-6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck6.py 2>&1 || true
+
+  run-bot-7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck7.py 2>&1 || true
+
+  run-bot-8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck8.py 2>&1 || true
+
+  run-bot-9:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck9.py 2>&1 || true
+
+  run-bot-10:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install playwright psutil websocket-client requests && playwright install chromium
+      - run: timeout 3500 python -u ck10.py 2>&1 || true
