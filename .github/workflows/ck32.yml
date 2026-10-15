@@ -79,7 +79,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-screenshots-ck1
+          name: debug-screenshots-ck32
           path: /tmp/debug_*.png
           if-no-files-found: ignore
           retention-days: 7
@@ -90,5 +90,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sleep 5
-          echo "Triggering next ck32 run..."
-          gh workflow run ck32.yml --ref "$GITHUB_REF" || echo "(restart failed)"
+          echo "Triggering next ck1 run..."
+          gh workflow run ck1.yml --ref "$GITHUB_REF" || echo "(restart failed)"
