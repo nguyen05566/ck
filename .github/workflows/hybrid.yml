@@ -1,20 +1,17 @@
 name: hybrid-parallel
 
 # ============================================================
-# HYBRID PARALLELISM — gộp 44 bot ck*.py thành 10 job matrix
+# HYBRID PARALLELISM — gộp 40 bot ck*.py thành 10 job matrix
 # ============================================================
 # - Mức 1 (matrix): 10 group song song, GitHub Actions tự sinh 10 runner
-# - Mức 2 (process): trong mỗi group, 4-5 bot chạy đồng thời bằng bash `&` + `wait`
+# - Mức 2 (process): trong mỗi group, 3-5 bot chạy đồng thời bằng bash `&` + `wait`
 #
-# Tổng bot: 44 (ck1-ck46, bỏ ck11 và ck22 vì không tồn tại)
-# Trước đây: 44 workflow × 5h50m = ~257h Actions/run
-# Sau gộp:   10 job      × 5h50m = ~58h Actions/run  → tiết kiệm ~80%
+# Tổng bot: 40 (ck1-ck46, bỏ ck11, ck22, ck4, ck37, ck39, ck40)
+# Trước đây: 40 workflow × 5h50m = ~233h Actions/run
+# Sau gộp:   10 job      × 5h50m = ~58h Actions/run  → tiết kiệm ~75%
 #
 # GitHub-hosted ubuntu-latest runner: 4 vCPU / 16 GB RAM / 14 GB SSD
-# → mỗi job chạy 4-5 Chromium headless (~1-1.5 GB mỗi con) hoàn toàn thoải mái.
-#
-# anti_lock.py v3 đã sharding state per-bot (state/<ck>.state.json,
-# fingerprints/<ck>.fp.json) → không tranh chấp khi chạy song song.
+# → mỗi job chạy 3-5 Chromium headless (~1-1.5 GB mỗi con) hoàn toàn thoải mái.
 # ============================================================
 
 on:
@@ -27,14 +24,10 @@ permissions:
   actions: write
   contents: read
 
-# (Concurrency được set ở job-level để có quyền truy cập matrix.group)
-
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    # Mỗi group có concurrency group riêng -> cron tiếp theo xếp hàng chờ,
-    # không huỷ phiên đang chạy (cancel-in-progress: false)
     concurrency:
       group: hybrid-${{ matrix.group }}
       cancel-in-progress: false
@@ -44,8 +37,8 @@ jobs:
       matrix:
         include:
           - group: g1
-            bots: "ck1.py ck2.py ck3.py ck4.py ck5.py"
-            bot_count: 5
+            bots: "ck1.py ck2.py ck3.py ck5.py"
+            bot_count: 4
           - group: g2
             bots: "ck6.py ck7.py ck8.py ck9.py ck10.py"
             bot_count: 5
@@ -65,11 +58,11 @@ jobs:
             bots: "ck31.py ck32.py ck33.py ck34.py"
             bot_count: 4
           - group: g8
-            bots: "ck35.py ck36.py ck37.py ck38.py"
-            bot_count: 4
+            bots: "ck35.py ck36.py ck38.py"
+            bot_count: 3
           - group: g9
-            bots: "ck39.py ck40.py ck41.py ck42.py"
-            bot_count: 4
+            bots: "ck41.py ck42.py"
+            bot_count: 2
           - group: g10
             bots: "ck43.py ck44.py ck45.py ck46.py"
             bot_count: 4
@@ -147,54 +140,24 @@ jobs:
             echo "[$(date '+%H:%M:%S')] Starting $bot -> /tmp/bot_logs/${name}.log"
             run_bot "$bot" &
             PIDS+=($!)
-            # Stagger 10-15s giữa các launch để tránh 5 browser bung RAM cùng lúc
-            sleep $((RANDOM % 6 + 10))
+            sleep 12
           done
 
-          echo ""
-          echo "=== All ${#PIDS[@]} bots of group ${{ matrix.group }} launched. ==="
-          echo "PIDs: ${PIDS[*]}"
-          echo ""
-
-          FAILED=0
-          for pid in "${PIDS[@]}"; do
-            wait $pid
-            STATUS=$?
-            echo "[$(date '+%H:%M:%S')] PID $pid exited status=$STATUS"
-            [ $STATUS -ne 0 ] && FAILED=$((FAILED+1))
+          echo "Waiting for all bots to finish..."
+          for PID in "${PIDS[@]}"; do
+            wait $PID
           done
 
-          echo ""
-          echo "=== Group ${{ matrix.group }} done — $FAILED/${#PIDS[@]} failed ==="
-          # Luôn exit 0 để 1 bot fail không huỷ cả job → log/artifact vẫn upload được
-          exit 0
-
-      - name: Show all bot logs (tail 300 lines each)
-        if: always()
-        run: |
+          echo "=== FINAL LOGS ==="
           for f in /tmp/bot_logs/*.log; do
-            [ -f "$f" ] || continue
-            echo ""
-            echo "============================================================"
-            echo "=== $f ==="
-            echo "============================================================"
-            tail -300 "$f" 2>/dev/null || echo "(empty)"
+            echo "--- $f ---"
+            tail -20 "$f"
           done
 
-      - name: Upload debug screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-shots-${{ matrix.group }}
-          path: /tmp/debug_*.png
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload all bot logs
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bot-logs-${{ matrix.group }}
-          path: /tmp/bot_logs/*.log
-          if-no-files-found: warn
-          retention-days: 7
+          path: /tmp/bot_logs/
+          retention-days: 3
