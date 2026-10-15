@@ -27,16 +27,17 @@ permissions:
   actions: write
   contents: read
 
-concurrency:
-  # Mỗi group có concurrency group riêng → cron tiếp theo xếp hàng chờ,
-  # không huỷ phiên đang chạy
-  group: ${{ matrix.group }}
-  cancel-in-progress: false
+# (Concurrency được set ở job-level để có quyền truy cập matrix.group)
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    # Mỗi group có concurrency group riêng -> cron tiếp theo xếp hàng chờ,
+    # không huỷ phiên đang chạy (cancel-in-progress: false)
+    concurrency:
+      group: hybrid-${{ matrix.group }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       max-parallel: 10
