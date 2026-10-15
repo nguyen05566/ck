@@ -1,0 +1,39 @@
+name: ck1-10
+
+on:
+  workflow_dispatch:
+
+env:
+  TRANSFER_DEST_ID: '17692951'
+  MAX_RUNTIME: '21000'
+  PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
+
+jobs:
+  run-bots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run bots sequentially
+        env:
+          TRANSFER_DEST_ID: '17692951'
+          MAX_RUNTIME: '21000'
+        run: |
+          BOTS="ck1.py ck2.py ck3.py ck4.py ck5.py ck6.py ck7.py ck8.py ck9.py ck10.py"
+          for BOT in $BOTS; do
+            echo "=== Running $BOT ==="
+            timeout 3500 python -u "$BOT" 2>&1 || echo "$BOT finished"
+            echo "---"
+          done
