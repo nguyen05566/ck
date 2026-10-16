@@ -1,0 +1,61 @@
+name: c-maubinh_xapxam
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright websocket-client psutil requests
+          playwright install chromium --with-deps
+
+      - name: Run c-maubinh_xapxam
+        env:
+          MAX_CLAIMS: '40'
+          HEADLESS: 'true'
+          COOLDOWN: '3'
+          REST_BETWEEN_RUNS: '5'
+          MAX_RUNTIME: '21000'
+          TRANSFER_DEST_ID: '61447045'
+          TRANSFER_ENABLED: 'true'
+          PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
+          MAX_CLAIMS_PER_DAY: '120'
+          MAX_TRANSFERS_PER_DAY: '20'
+          SESSION_START_JITTER: '180'
+          IDLE_EVERY_CLAIMS: '40'
+          SINGLE_COOKIE_FILE: 'c.txt'
+          GAME_URL: 'https://www.facebook.com/gaming/play/maubinh_xapxam'
+        run: |
+          set +e
+          END_TIME=$(( $(date +%s) + ${MAX_RUNTIME} ))
+          ATTEMPT=0
+          while [ $(date +%s) -lt $END_TIME ]; do
+            ATTEMPT=$((ATTEMPT+1))
+            REMAIN=$(( END_TIME - $(date +%s) ))
+            echo "=== [c-maubinh_xapxam] Attempt #$ATTEMPT — ${REMAIN}s left ==="
+            python3 -u c-maubinh_xapxam.py
+            EXIT=$?
+            echo "=== [c-maubinh_xapxam] exit=$EXIT ==="
+            REMAIN=$(( END_TIME - $(date +%s) ))
+            if [ $REMAIN -le 30 ]; then
+              break
+            fi
+            echo "[c-maubinh_xapxam] Sleeping 60s..."
+            sleep 60
+          done
