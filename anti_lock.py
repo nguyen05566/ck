@@ -1,55 +1,9 @@
 #!/usr/bin/env python3
-"""
-
-  A) Fingerprint ngẫu nhiên NHƯNG cố định per-account:
-     Mỗi cookie file (ck1.txt, ck2.txt ...) sẽ luôn dùng cùng 1 UA / viewport /
-     locale / timezone / WebGL vendor — không đổi giữa các lần chạy → giống 1
-     thiết bị thật, nhưng khác nhau giữa các nick → không bị cluster bot-farm.
-     (v2) Locale + timezone luôn đi CẶP với nhau (vi-VN↔Asia/Ho_Chi_Minh ...),
-     thêm screen / accept_language / color_scheme → fingerprint nhất quán hơn.
-
-  B) Stealth JS injection:
-     Xóa navigator.webdriver, fake plugins, fake chrome.runtime, override
-     permissions.query, spoof WebGL vendor/renderer, fake hardwareConcurrency,
-     spoof screen/outerWidth khớp viewport, chống leak WebRTC.
-     (v2) Sửa bug attachShadow sai ở bản cũ, toString-safe, an toàn tuyệt đối.
-
-  C) Human-like timing:
-     - human_delay(min,max)   → phân phối tam giác (dồn về phía nhanh, thỉnh
-       thoảng chậm) thay vì fixed 3.0s — giống người thật hơn
-     - jitter_sleep(base,jit) → base + random jitter
-     - random_batch_size(n)   → batch size biến thiên QUANH `base` (gaussian)
-     - human_type / human_click → gõ phím + di chuột kiểu người (v2)
-
-  D) Daily quota / state file:
-     Theo dõi số claim / số transfer / số xu đã transfer mỗi ngày cho mỗi cookie.
-     Vượt MAX_CLAIMS_PER_DAY → tự dừng, tránh spam server.
-     (v2) Ghi state AN TOÀN: file-lock + atomic write.
-     (v3) SHARDING PER-BOT: state/<cookie>.state.json + fingerprints/<cookie>.fp.json
-     — mỗi bot ghi file CỦA MÌNH, không còn file gộp/lock toàn cục → chạy 100+
-     bot song song vẫn O(1)/lần ghi, không tranh chấp, không mất quota của nhau.
-
-  E) Soft-ban detection:
-     Phát hiện keyword "rate limit" / "too many requests" / "tạm thời" / "khóa"
-     trong response → back-off dài (15-30 phút) trước khi thử lại.
-     (v2) Dùng regex có ranh giới từ + ngưỡng điểm số → giảm FALSE POSITIVE
-     (HTML bình thường chứa chữ "spam"/"blocked" không còn bị chặn oan).
-     Back-off TĂNG DẦN theo chuỗi soft-ban liên tiếp (1.6^n, tối đa 4 giờ).
-
-  F) Transfer destination rotation:
-     Đọc danh sách hub account từ transfer_dests.json → xoay vòng, không phải
-     luôn gửi về cùng 1 dest_id (tránh hub-and-spoke detection).
-     (v2) SỬA BUG: hash() của Python bị randomize mỗi process → trước đây dest
-     KHÔNG cố định như comment. Giờ dùng md5 → ổn định vĩnh viễn.
-
-  G) Random session offset:
-     Sleep 0-180s ngẫu nhiên trước khi mở session đầu tiên → 8 nick không
-     "đồng loạt" bật browser cùng 1 lúc.
-"""
 import os
 import re
 import json
 import time
+import copy
 import random
 import hashlib
 import contextlib
@@ -62,15 +16,15 @@ DEST_FILE     = os.environ.get("TRANSFER_DEST_FILE", os.path.join(_HERE, "transf
 # =====================================================================
 # A) FINGERPRINT POOLS
 # =====================================================================
-# Lấy từ thống kê Chrome thật phổ biến trên Windows/Mac/Linux.
+# Chrome thật phổ biến trên Windows/Mac/Linux (2026).
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 ]
 
 VIEWPORTS = [
@@ -81,6 +35,10 @@ VIEWPORTS = [
     {"width": 1366, "height": 768},
     {"width": 1600, "height": 900},
     {"width": 1280, "height": 720},
+    {"width": 1920, "height": 1200},
+    {"width": 2560, "height": 1440},
+    {"width": 1512, "height": 982},   # MacBook Pro 14"
+    {"width": 1728, "height": 1117},  # MacBook Pro 16"
 ]
 
 # Locale "vi-VN" nên dùng cho cookie Việt Nam; để fallback en-US cho an toàn.
@@ -91,7 +49,7 @@ TIMEZONES = [
     "America/New_York", "Europe/London",
 ]
 
-# (v2) Cặp locale ↔ timezone nhất quán — tránh "người Việt nhưng máy ở New York".
+# Cặp locale ↔ timezone nhất quán — tránh "người Việt nhưng máy ở New York".
 COHERENT_LOCALE_TZ = [
     ("vi-VN", "Asia/Ho_Chi_Minh"),
     ("en-US", "America/New_York"),
@@ -108,9 +66,14 @@ PLATFORMS = {
 
 WEBGL_VENDORS = [
     ("Google Inc. (Intel)",       "ANGLE (Intel, Intel(R) UHD Graphics 630, OpenGL 4.1)"),
+    ("Google Inc. (Intel)",       "ANGLE (Intel, Intel(R) UHD Graphics 770, OpenGL 4.1)"),
+    ("Google Inc. (Intel)",       "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics, OpenGL 4.1)"),
     ("Google Inc. (NVIDIA)",      "ANGLE (NVIDIA, NVIDIA GeForce GTX 1060, OpenGL 4.5)"),
-    ("Google Inc. (AMD)",          "ANGLE (AMD, AMD Radeon RX 580, OpenGL 4.5)"),
-    ("Google Inc. (Intel)",        "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics, OpenGL 4.1)"),
+    ("Google Inc. (NVIDIA)",      "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060, OpenGL 4.5)"),
+    ("Google Inc. (NVIDIA)",      "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060, OpenGL 4.5)"),
+    ("Google Inc. (AMD)",         "ANGLE (AMD, AMD Radeon RX 580, OpenGL 4.5)"),
+    ("Google Inc. (AMD)",         "ANGLE (AMD, AMD Radeon RX 6600 XT, OpenGL 4.5)"),
+    ("Google Inc. (Apple)",       "ANGLE (Apple, Apple M2, OpenGL 4.1)"),
 ]
 
 
@@ -122,13 +85,13 @@ def _platform_for(ua: str) -> str:
 
 
 def _accept_language(locale: str) -> str:
-    """Sinh Accept-Language header khớp locale (v2)."""
+    """Sinh Accept-Language header khớp locale."""
     primary = (locale or "en-US").split("-")[0]
     return f"{locale},{primary};q=0.9,en;q=0.8"
 
 
 def _screen_for(viewport: dict) -> dict:
-    """Screen size = viewport + taskbar/menubar (v2 — nhất quán với viewport)."""
+    """Screen size = viewport + taskbar/menubar (nhất quán với viewport)."""
     w = int(viewport.get("width", 1920))
     h = int(viewport.get("height", 1080))
     return {
@@ -139,8 +102,17 @@ def _screen_for(viewport: dict) -> dict:
     }
 
 
+def _coherent_tz_for(locale: str) -> str:
+    """Chọn timezone khớp locale (vi-VN ↔ Asia/Ho_Chi_Minh ...) — tránh
+    'người Việt nhưng máy ở New York' khi field timezone bị thiếu."""
+    for loc, tz in COHERENT_LOCALE_TZ:
+        if loc == locale:
+            return tz
+    return random.choice(TIMEZONES)
+
+
 def _normalize_fp(fp: dict) -> dict:
-    """(v2) Điền field thiếu cho fingerprint cũ + fix field sai kiểu → migration."""
+    """Điền field thiếu cho fingerprint cũ + fix field sai kiểu → migration."""
     if not isinstance(fp, dict):
         fp = {}
     ua = fp.get("user_agent") or random.choice(USER_AGENTS)
@@ -156,7 +128,7 @@ def _normalize_fp(fp: dict) -> dict:
         "user_agent":   ua,
         "viewport":     vp,
         "locale":       locale,
-        "timezone":     fp.get("timezone") or random.choice(TIMEZONES),
+        "timezone":     fp.get("timezone") or _coherent_tz_for(locale),
         "platform":     fp.get("platform") or _platform_for(ua),
         "webgl_vendor": vendor,
         "webgl_renderer": renderer,
@@ -223,7 +195,7 @@ def _file_lock(path: str):
                 pass
 
 
-# ---- (v3) SHARDING PER-BOT: mỗi bot 1 file riêng → 100+ bot không tranh chấp ----
+# ---- SHARDING PER-BOT: mỗi bot 1 file riêng → 100+ bot không tranh chấp ----
 def _bot_id(cookie_file: str) -> str:
     """'ck1.txt' → 'ck1.txt' (lọc ký tự lạ để làm tên file an toàn)."""
     return re.sub(r"[^\w.\-]", "_", os.path.basename(cookie_file or "unknown"))
@@ -239,57 +211,92 @@ def _bot_state_path(cookie_file: str) -> str:
     return os.path.join(STATE_DIR, _bot_id(cookie_file) + ".state.json")
 
 
+# Cache fingerprint in-process, validate theo mtime_ns: đọc lại file khi có
+# process khác ghi (os.replace → mtime đổi), còn không thì bỏ qua lock + I/O.
+_FP_CACHE: dict = {}
+
+
+def _fp_cache_get(path: str):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    hit = _FP_CACHE.get(path)
+    if hit and hit[0] == st.st_mtime_ns:
+        return copy.deepcopy(hit[1])
+    return None
+
+
+def _fp_cache_put(path: str, fp: dict):
+    try:
+        st = os.stat(path)
+        _FP_CACHE[path] = (st.st_mtime_ns, copy.deepcopy(fp))
+    except OSError:
+        pass
+
+
+def _fp_build(fp_path: str, key: str):
+    """Đọc + migrate từ file gộp cũ + normalize. Trả về (fp, dirty)."""
+    fp = _read_json(fp_path, None)
+    dirty = False
+
+    if not isinstance(fp, dict) or not fp:
+        legacy = _read_json(os.path.join(FP_DIR, "fingerprint.json"), {})
+        fp = legacy.get(key) if isinstance(legacy, dict) else None
+        if not isinstance(fp, dict):
+            ua = random.choice(USER_AGENTS)
+            vendor, renderer = random.choice(WEBGL_VENDORS)
+            locale, timezone = random.choice(COHERENT_LOCALE_TZ)
+            viewport = random.choice(VIEWPORTS)
+            fp = {
+                "user_agent":   ua,
+                "viewport":     viewport,
+                "locale":       locale,
+                "timezone":     timezone,
+                "platform":     _platform_for(ua),
+                "webgl_vendor": vendor,
+                "webgl_renderer": renderer,
+                "hardware_concurrency": random.choice([4, 8, 8, 12, 16]),
+                "device_memory": random.choice([4, 8, 8, 16]),
+                "color_scheme": random.choice(["light", "light", "dark"]),
+                "accept_language": _accept_language(locale),
+                "screen":       _screen_for(viewport),
+                "created_at":   time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        dirty = True
+
+    completed = _normalize_fp(dict(fp))
+    if completed != fp:
+        fp = completed
+        dirty = True
+    return fp, dirty
+
+
 def get_or_create_fingerprint(cookie_file: str) -> dict:
     """Trả về fingerprint cố định cho 1 cookie file. Tự sinh + lưu nếu chưa có.
 
-    (v3) Lưu PER-BOT (fingerprints/<cookie>.fp.json) thay vì 1 file gộp
-    fingerprint.json: 100 bot không đụng chung 1 file → không lock toàn cục,
-    không race, mỗi lần ghi chỉ 1 file nhỏ (O(1) theo số bot). Tự migrate
-    fingerprint cũ từ file gộp nếu có.
+    Lưu PER-BOT (fingerprints/<cookie>.fp.json): mỗi bot 1 file → không lock
+    toàn cục, không race. Đường ĐỌC không lock (ghi là atomic qua os.replace);
+    chỉ lock khi cần tạo/migrate/normalize → lần gọi lặp lại lấy từ cache.
     """
-    os.makedirs(FP_DIR, exist_ok=True)
     key = os.path.basename(cookie_file)
     fp_path = _fp_path(cookie_file)
 
-    # Lock per-bot — chỉ tranh chấp nếu cùng 1 bot chạy 2 process, không liên
-    # quan tới số lượng bot khác → scale vô hạn.
+    cached = _fp_cache_get(fp_path)
+    if cached is not None:
+        return cached
+
+    fp, dirty = _fp_build(fp_path, key)
+    if not dirty:
+        _fp_cache_put(fp_path, fp)
+        return fp
+
+    os.makedirs(FP_DIR, exist_ok=True)
     with _file_lock(fp_path):
-        fp = _read_json(fp_path, None)
-        dirty = False
-
-        if not isinstance(fp, dict) or not fp:
-            # migrate từ file gộp cũ (v1/v2) nếu có
-            legacy = _read_json(os.path.join(FP_DIR, "fingerprint.json"), {})
-            fp = legacy.get(key) if isinstance(legacy, dict) else None
-            if not isinstance(fp, dict):
-                ua = random.choice(USER_AGENTS)
-                vendor, renderer = random.choice(WEBGL_VENDORS)
-                locale, timezone = random.choice(COHERENT_LOCALE_TZ)
-                viewport = random.choice(VIEWPORTS)
-                fp = {
-                    "user_agent":   ua,
-                    "viewport":     viewport,
-                    "locale":       locale,
-                    "timezone":     timezone,
-                    "platform":     _platform_for(ua),
-                    "webgl_vendor": vendor,
-                    "webgl_renderer": renderer,
-                    "hardware_concurrency": random.choice([4, 8, 8, 12, 16]),
-                    "device_memory": random.choice([4, 8, 8, 16]),
-                    "color_scheme": random.choice(["light", "light", "dark"]),
-                    "accept_language": _accept_language(locale),
-                    "screen":       _screen_for(viewport),
-                    "created_at":   time.strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            dirty = True
-
-        completed = _normalize_fp(dict(fp))
-        if completed != fp:
-            fp = completed
-            dirty = True
+        fp, dirty = _fp_build(fp_path, key)   # re-read dưới lock
         if dirty:
             _atomic_write_json(fp_path, fp)
-
+    _fp_cache_put(fp_path, fp)
     return fp
 
 
@@ -472,8 +479,8 @@ def bot_concurrency() -> int:
 def random_session_offset(max_s: int = 180) -> float:
     """Sleep 0..max_s giây trước khi mở session đầu tiên.
 
-    (v3) Tự NỚI RỘNG cửa sổ theo số bot: ~12s/bot (100 bot → ~1200s spread)
-    để 100 browser không "đồng loạt" bật lên cùng lúc. Set env BOT_COUNT để
+    Tự NỚI RỘNG cửa sổ theo số bot: ~12s/bot (100 bot → ~1200s spread)
+    để nhiều browser không "đồng loạt" bật lên cùng lúc. Set env BOT_COUNT để
     chỉnh; min = max_s, max = 3600s.
     """
     spread = max(max_s, min(3600, bot_concurrency() * 12))
@@ -483,7 +490,7 @@ def random_session_offset(max_s: int = 180) -> float:
 
 
 # =====================================================================
-# C2) HUMAN-LIKE INPUT (v2) — gõ phím / click chuột kiểu người
+# C2) HUMAN-LIKE INPUT — gõ phím / click chuột kiểu người
 # =====================================================================
 def human_type(page, selector, text: str,
                per_key_min: float = 0.05, per_key_max: float = 0.22,
@@ -534,7 +541,7 @@ DEFAULT_MAX_CLAIMS_PER_DAY    = 180   # ~3 batch x 40 + buffer
 DEFAULT_MAX_TRANSFERS_PER_DAY = 30
 DEFAULT_MAX_TRANSFER_AMOUNT   = 2_000_000  # tổng xu transfer/ngày/cookie
 
-_STATE_FILE = os.path.join(STATE_DIR, "daily_state.json")  # legacy (v2) file gộp — giờ CHỈ đọc để migrate
+_STATE_FILE = os.path.join(STATE_DIR, "daily_state.json")  # file gộp cũ — chỉ đọc để migrate
 
 
 def _today() -> str:
@@ -550,15 +557,16 @@ def _fresh_state() -> dict:
         "sessions_today":     0,
         "last_run_ts":        0,
         "soft_ban_until":     0,    # epoch seconds — nếu > now thì đang bị soft-ban
-        "soft_ban_streak":    0,    # (v2) số lần soft-ban liên tiếp → back-off tăng dần
+        "soft_ban_streak":    0,    # số lần soft-ban liên tiếp → back-off tăng dần
     }
 
 
-def _load_entry_locked(path: str, cookie_file: str):
-    """Đọc entry state (KHI ĐÃ giữ lock per-bot). Trả về (entry, dirty).
+def _load_entry(path: str, cookie_file: str):
+    """Đọc entry state. Trả về (entry, dirty).
 
     - Tự migrate từ daily_state.json (file gộp cũ) nếu bot chưa có file riêng.
     - Tự bổ sung field mới (_fresh_state) cho state tạo bởi phiên bản trước.
+    An toàn khi đọc không lock: mọi ghi đều qua os.replace (atomic).
     """
     entry = _read_json(path, None)
     dirty = False
@@ -579,15 +587,18 @@ def _load_entry_locked(path: str, cookie_file: str):
 
 
 def load_daily_state(cookie_file: str) -> dict:
-    """(v3) Đọc state PER-BOT: state/<cookie>.state.json.
+    """Đọc state PER-BOT: state/<cookie>.state.json — mỗi bot 1 file.
 
-    100 bot mỗi đứa 1 file riêng → không tranh chấp, không lock toàn cục,
-    đọc/ghi chỉ 1 file nhỏ → O(1) bất kể số lượng bot.
+    Đường đọc KHÔNG lock (atomic write); chỉ lock khi cần migrate/ghi lần đầu
+    → check_daily_quota trước mỗi claim không còn tốn flock.
     """
-    os.makedirs(STATE_DIR, exist_ok=True)
     path = _bot_state_path(cookie_file)
+    entry, dirty = _load_entry(path, cookie_file)
+    if not dirty:
+        return entry
+    os.makedirs(STATE_DIR, exist_ok=True)
     with _file_lock(path):
-        entry, dirty = _load_entry_locked(path, cookie_file)
+        entry, dirty = _load_entry(path, cookie_file)   # re-read dưới lock
         if dirty:
             _atomic_write_json(path, entry)
     return entry
@@ -599,7 +610,7 @@ def _save_state(state_path: str, states: dict):
 
 
 def save_daily_state(cookie_file: str, state: dict):
-    """(v3) Ghi state vào FILE PER-BOT — không đụng bot nào khác."""
+    """Ghi state vào FILE PER-BOT — không đụng bot nào khác."""
     os.makedirs(STATE_DIR, exist_ok=True)
     path = _bot_state_path(cookie_file)
     with _file_lock(path):
@@ -607,15 +618,13 @@ def save_daily_state(cookie_file: str, state: dict):
 
 
 def _update_state(cookie_file: str, mutate) -> dict:
-    """(v3) Read-modify-write NGUYÊN TỬ trên FILE PER-BOT.
+    """Read-modify-write NGUYÊN TỬ trên FILE PER-BOT.
 
-    Lock chỉ trong phạm vi 1 bot → 100 bot chạy song song KHÔNG chờ nhau,
-    không còn nút cổ chai 1 file gộp như v2.
-    """
+    Lock chỉ trong phạm vi 1 bot → 100 bot chạy song song KHÔNG chờ nhau."""
     os.makedirs(STATE_DIR, exist_ok=True)
     path = _bot_state_path(cookie_file)
     with _file_lock(path):
-        entry, _ = _load_entry_locked(path, cookie_file)
+        entry, _ = _load_entry(path, cookie_file)
         entry = dict(entry)
         mutate(entry)
         _atomic_write_json(path, entry)
@@ -628,15 +637,18 @@ def check_daily_quota(cookie_file: str,
                       max_amount=DEFAULT_MAX_TRANSFER_AMOUNT) -> tuple:
     """Trả về (ok, reason). ok=False nghĩa là đã vượt quota hôm nay."""
     st = load_daily_state(cookie_file)
-    if st["claims_today"] >= max_claims:
-        return False, f"đã claim {st['claims_today']}/{max_claims} hôm nay"
-    if st["transfers_today"] >= max_transfers:
-        return False, f"đã transfer {st['transfers_today']}/{max_transfers} lần hôm nay"
-    if st["amount_transferred"] >= max_amount:
-        return False, f"đã transfer {st['amount_transferred']:,}/{max_amount:,} xu hôm nay"
-    if st.get("soft_ban_until", 0) > time.time():
-        wait = int(st["soft_ban_until"] - time.time())
-        return False, f"đang bị soft-ban, còn {wait}s chờ"
+    claims = int(st.get("claims_today", 0))
+    transfers = int(st.get("transfers_today", 0))
+    amount = int(st.get("amount_transferred", 0))
+    if claims >= max_claims:
+        return False, f"đã claim {claims}/{max_claims} hôm nay"
+    if transfers >= max_transfers:
+        return False, f"đã transfer {transfers}/{max_transfers} lần hôm nay"
+    if amount >= max_amount:
+        return False, f"đã transfer {amount:,}/{max_amount:,} xu hôm nay"
+    ban_until = int(st.get("soft_ban_until", 0))
+    if ban_until > time.time():
+        return False, f"đang bị soft-ban, còn {int(ban_until - time.time())}s chờ"
     return True, "ok"
 
 
@@ -667,9 +679,8 @@ def record_session_start(cookie_file: str):
 def set_soft_ban(cookie_file: str, duration_s: int = 900, escalate: bool = True):
     """Đặt cooldown soft-ban (mặc định 15 phút).
 
-    (v2) escalate=True: mỗi lần soft-ban liên tiếp nhân 1.6 lần thời gian chờ
-    (tối đa 4 giờ) — FB thấy mình 'biết điều' thay vì retry đều đều.
-    """
+    escalate=True: mỗi lần soft-ban liên tiếp nhân 1.6 lần thời gian chờ
+    (tối đa 4 giờ) — FB thấy mình 'biết điều' thay vì retry đều đều."""
     def _m(st):
         if escalate:
             streak = int(st.get("soft_ban_streak", 0)) + 1
@@ -689,12 +700,9 @@ def clear_soft_ban(cookie_file: str):
     _update_state(cookie_file, _m)
 
 
-# ---- (v3) Giám sát 100+ bot: quét thư mục, KHÔNG cần file gộp, KHÔNG lock ----
+# ---- Giám sát 100+ bot: quét thư mục, KHÔNG cần file gộp, KHÔNG lock ----
 def load_all_states() -> dict:
-    """Trả về {cookie_file: state} của TẤT CẢ bot (quét state/*.state.json).
-
-    Không lock, không file gộp → an toàn chạy song song với 100 bot đang ghi.
-    """
+    """Trả về {cookie_file: state} của TẤT CẢ bot (quét state/*.state.json)."""
     out = {}
     legacy = _read_json(_STATE_FILE, {})        # file gộp cũ (nếu còn)
     if isinstance(legacy, dict):
@@ -731,15 +739,7 @@ def summarize_states() -> dict:
 # =====================================================================
 # E) SOFT-BAN / RATE-LIMIT DETECTION
 # =====================================================================
-SOFT_BAN_HINTS = (
-    "rate limit", "too many requests", "throttle", "spam",
-    "tạm thời", "vui lòng thử lại", "khóa tạm", "bị hạn chế",
-    "temporarily blocked", "temporarily restricted", "unusual activity",
-    "vui lòng đợi", "đăng nhập lại", "session expired", "blocked",
-    "khóa", "cấm",
-)
-
-# (v2) Regex có ranh giới từ — "blocked" trong link/CSS không còn match bừa.
+# Regex có ranh giới từ — "blocked" trong link/CSS không match bừa.
 SOFT_BAN_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
     r"rate[\s_-]*limit(ed)?",
     r"too\s+many\s+requests",
@@ -761,10 +761,10 @@ SOFT_BAN_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
 
 
 def detect_soft_ban_detail(text: str):
-    """(v2) Trả về pattern soft-ban match đầu tiên, hoặc None.
+    """Trả về pattern soft-ban match đầu tiên, hoặc None.
 
-    Quy tắc chống FALSE POSITIVE:
-      - text ngắn (<1500 ký tự): 1 match là đủ (đây thường là thông báo lỗi).
+    Chống FALSE POSITIVE:
+      - text ngắn (<1500 ký tự): 1 match là đủ (thường là thông báo lỗi).
       - text dài (nguyên trang HTML): cần ≥2 pattern KHÁC NHAU match → mới chặn.
     """
     if not text:
@@ -787,16 +787,24 @@ def detect_soft_ban(text: str) -> bool:
 # F) TRANSFER DESTINATION ROTATION
 # =====================================================================
 def load_transfer_dests(default_id: int = 51977054) -> list:
-    """Load danh sách dest_id từ transfer_dests.json. Fallback [default_id] nếu lỗi."""
+    """Load danh sách dest_id từ transfer_dests.json. Fallback [default_id] nếu lỗi.
+
+    Mỗi phần tử convert riêng: 1 entry hỏng không làm mất các dest còn lại."""
     if not os.path.exists(DEST_FILE):
         return [default_id]
     try:
         with open(DEST_FILE, "r", encoding="utf-8") as fh:
             data = json.load(fh)
         dests = data.get("dests") or data.get("destinations") or []
-        if not dests:
-            return [default_id]
-        return [int(d) for d in dests if d]
+        out = []
+        for d in dests:
+            try:
+                v = int(d)
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                out.append(v)
+        return out or [default_id]
     except Exception:
         return [default_id]
 
@@ -804,12 +812,9 @@ def load_transfer_dests(default_id: int = 51977054) -> list:
 def pick_next_dest(cookie_file: str, default_id: int = 51977054) -> int:
     """Xoay vòng dest_id per-cookie: cookie N luôn đi về dest[N % len(dests)].
 
-    Lý do: nếu 8 nick cùng transfer về 1 dest thì đó là hub-and-spoke pattern
-    cực kỳ dễ bị Facebook phát hiện (graph anomaly). Xoay vòng giúp phân tán.
-
-    (v2) SỬA BUG: bản cũ dùng hash() — Python randomize hash seed mỗi process
-    nên dest đổi liên tục, PHÁ VỠ tính "cố định per-cookie". Giờ dùng md5 →
-    index luôn ổn định giữa các lần chạy.
+    Nếu nhiều nick cùng transfer về 1 dest thì đó là hub-and-spoke pattern
+    dễ bị Facebook phát hiện (graph anomaly) → xoay vòng giúp phân tán.
+    Dùng md5 (không dùng hash()) — index ổn định giữa các process/lần chạy.
     """
     dests = load_transfer_dests(default_id)
     if len(dests) <= 1:
@@ -828,11 +833,8 @@ def pick_next_dest(cookie_file: str, default_id: int = 51977054) -> int:
 # G) BROWSER LAUNCH ARGS (chống detect + chống leak)
 # =====================================================================
 def stealth_launch_args(fp: dict = None) -> list:
-    """Args cho Chromium launch — mạnh hơn --disable-blink-features.
-
-    (v2) Nhận optional fp dict: thêm --lang / --window-size khớp fingerprint
-    (gọi không tham số vẫn hoạt động như cũ).
-    """
+    """Args cho Chromium launch. Nhận optional fp dict: thêm --lang / --window-size
+    khớp fingerprint (gọi không tham số vẫn hoạt động như cũ)."""
     args = [
         "--no-sandbox",
         "--disable-dev-shm-usage",
@@ -848,7 +850,6 @@ def stealth_launch_args(fp: dict = None) -> list:
         # Tắt một số tính năng gây fingerprint lạ
         "--disable-extensions",
         "--disable-component-extensions-with-background-pages",
-        # Số port DevTools ngẫu nhiên để không bị fingerprint qua port cố định
         "--disable-default-apps",
         # GPU info leak
         "--disable-gpu-sandbox",
@@ -871,8 +872,8 @@ def stealth_launch_args(fp: dict = None) -> list:
 def maybe_idle_browse(page, max_claims_so_far: int, every: int = 60):
     """Mỗi ~`every` claim (± jitter), giả lập người dùng nghỉ 30-90s (lướt FB feed).
 
-    Tránh pattern "claim liên tục 5.5 giờ không nghỉ" — server sẽ flag.
-    (v2) Ngưỡng nghỉ cũng được jitter → không phải lúc nào cũng đúng % 60.
+    Tránh pattern "claim liên tục nhiều giờ không nghỉ" — server sẽ flag.
+    Ngưỡng nghỉ jitter → không phải lúc nào cũng đúng % 60.
     """
     if max_claims_so_far <= 0:
         return
@@ -895,11 +896,9 @@ def maybe_idle_browse(page, max_claims_so_far: int, every: int = 60):
 def warm_up_account(page, fb_url: str = "https://www.facebook.com/", max_s: int = 15):
     """Sau khi login, scroll FB feed ~max_s giây trước khi vào game — giống người thật.
 
-    (v2) Tôn trọng ngân sách `max_s` (bản cũ bỏ qua tham số này → có thể lướt
-    lâu hơn dự kiến). Trả về tổng số giây đã warm-up.
+    Tôn trọng ngân sách `max_s`. Trả về tổng số giây đã warm-up.
     """
     deadline = time.time() + max(1.0, float(max_s))
-    elapsed = 0.0
     start = time.time()
     try:
         while time.time() < deadline:
@@ -927,7 +926,7 @@ def warm_up_account(page, fb_url: str = "https://www.facebook.com/", max_s: int 
 # Self-test khi chạy trực tiếp
 # =====================================================================
 if __name__ == "__main__":
-    print("=== anti_lock.py self-test (v2) ===")
+    print("=== anti_lock.py self-test ===")
     fp = get_or_create_fingerprint("ck_test.txt")
     print("Fingerprint for ck_test.txt:")
     print(json.dumps(fp, indent=2, ensure_ascii=False))
@@ -951,7 +950,7 @@ if __name__ == "__main__":
     print("  HTML dài chứa 'rate limit' + 'blocked'  →", detect_soft_ban("<html>rate limit " + "x" * 2000 + " account has been blocked</html>"))
     print("  None                                  →", detect_soft_ban(None))
     print("\nrandom_batch_size(40) mẫu:", [random_batch_size(40) for _ in range(5)])
-    print("\n--- (v3) Per-bot sharding ---")
+    print("\n--- Per-bot sharding ---")
     print("  fp path   :", _fp_path("ck_test.txt"))
     print("  state path:", _bot_state_path("ck_test.txt"))
     record_claim("ck_test.txt")
