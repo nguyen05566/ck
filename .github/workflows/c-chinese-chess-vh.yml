@@ -27,21 +27,29 @@ jobs:
 
       - name: Setup Cloudflare WARP (1.1.1.1)
         run: |
-          set -uo pipefail
+          set +e
           echo "=== Setup WARP (wgcf + WireGuard) ==="
+          cd /tmp
           sudo apt-get update -qq
           sudo apt-get install -y -qq wireguard
           curl -fsSL -o /tmp/wgcf https://github.com/ViRb3/wgcf/releases/download/v2.2.22/wgcf_2.2.22_linux_amd64
           chmod +x /tmp/wgcf
           /tmp/wgcf register --accept-tos
           /tmp/wgcf generate
+          # wgcf generate thanh cong -> wgcf-profile.conf o CWD (/tmp)
           # Bo DNS= de tranh wg-quick fail vi thieu resolvconf tren runner
           sed -i '/^DNS=/d' /tmp/wgcf-profile.conf
           sudo cp /tmp/wgcf-profile.conf /etc/wireguard/warp.conf
-          sudo wg-quick up warp
-          sleep 3
-          echo "=== Verify WARP ==="
-          curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp|loc)=' || echo "WARN: khong verify duoc WARP — chay tiep direct"
+          if sudo wg-quick up warp; then
+            sleep 3
+            echo "=== Verify WARP ==="
+            curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp|loc)=' || echo "WARN: khong trace duoc"
+            echo "WARP_STATUS=up"
+          else
+            echo "WARN: wg-quick up that bai — bot van chay direct"
+            echo "WARP_STATUS=direct"
+          fi
+          cd "$GITHUB_WORKSPACE"
 
       - name: Run c-chinese-chess-vh
         env:
