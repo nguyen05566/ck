@@ -1,9 +1,9 @@
 name: hybrid-parallel
 
 # ============================================================
-# HYBRID PARALLELISM — 40 bot chia 2 nhóm transfer ID
+# HYBRID PARALLELISM — 40 bot transfer về 71746808
 # ============================================================
-# Nhóm A (g1-g5): transfer về 71746784
+# Nhóm A (g1-g5): transfer về 71746808
 # Nhóm B (g6-g10): transfer về 71746808
 # ============================================================
 
@@ -28,27 +28,27 @@ jobs:
       max-parallel: 10
       matrix:
         include:
-          # ===== NHÓM A: transfer về 71746784 =====
+          # ===== NHÓM A: transfer về 71746808 =====
           - group: g1
             bots: "ck1.py ck2.py ck3.py ck5.py"
             bot_count: 4
-            transfer_dest: "71746784"
+            transfer_dest: "71746808"
           - group: g2
             bots: "ck6.py ck7.py ck8.py ck9.py ck10.py"
             bot_count: 5
-            transfer_dest: "71746784"
+            transfer_dest: "71746808"
           - group: g3
             bots: "ck12.py ck13.py ck14.py ck15.py ck16.py"
             bot_count: 5
-            transfer_dest: "71746784"
+            transfer_dest: "71746808"
           - group: g4
             bots: "ck17.py ck18.py ck19.py ck20.py ck21.py"
             bot_count: 5
-            transfer_dest: "71746784"
+            transfer_dest: "71746808"
           - group: g5
             bots: "ck23.py ck24.py ck25.py ck26.py"
             bot_count: 4
-            transfer_dest: "71746784"
+            transfer_dest: "71746808"
           
           # ===== NHÓM B: transfer về 71746808 =====
           - group: g6
