@@ -25,6 +25,24 @@ jobs:
           pip install playwright websocket-client psutil requests
           playwright install chromium --with-deps
 
+      - name: Setup Cloudflare WARP (1.1.1.1)
+        run: |
+          set -uo pipefail
+          echo "=== Setup WARP (wgcf + WireGuard) ==="
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wireguard
+          curl -fsSL -o /tmp/wgcf https://github.com/ViRb3/wgcf/releases/download/v2.2.22/wgcf_2.2.22_linux_amd64
+          chmod +x /tmp/wgcf
+          /tmp/wgcf register --accept-tos
+          /tmp/wgcf generate
+          # Bo DNS= de tranh wg-quick fail vi thieu resolvconf tren runner
+          sed -i '/^DNS=/d' /tmp/wgcf-profile.conf
+          sudo cp /tmp/wgcf-profile.conf /etc/wireguard/warp.conf
+          sudo wg-quick up warp
+          sleep 3
+          echo "=== Verify WARP ==="
+          curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp|loc)=' || echo "WARN: khong verify duoc WARP — chay tiep direct"
+
       - name: Run f-maubinh_xapxam
         env:
           MAX_CLAIMS: '40'
@@ -32,7 +50,7 @@ jobs:
           COOLDOWN: '3'
           REST_BETWEEN_RUNS: '5'
           MAX_RUNTIME: '21000'
-          TRANSFER_DEST_ID: '71746808'
+          TRANSFER_DEST_ID: '71746784'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
           MAX_CLAIMS_PER_DAY: '120'
