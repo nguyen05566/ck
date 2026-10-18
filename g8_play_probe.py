@@ -127,6 +127,25 @@ async def main() -> int:
                 await close_ads("second", tries=15)
                 await page.wait_for_timeout(5000)
                 await page.screenshot(path=f"{OUT_DIR}/menu.png", full_page=False)
+
+                # đóng popup ATTENDANCE (X ~ 63.3% ngang, 15.3% dọc)
+                ax = box["x"] + box["width"] * 0.633
+                ay = box["y"] + box["height"] * 0.153
+                await page.mouse.click(ax, ay)
+                RESULT["notes"].append("closed_attendance")
+                await page.wait_for_timeout(2500)
+                await close_ads("after-att", tries=8)
+                await page.screenshot(path=f"{OUT_DIR}/lobby-before.png", full_page=False)
+
+                # bấm LOBBY (đáy giữa ~ 49.8% ngang, 93.2% dọc)
+                lx = box["x"] + box["width"] * 0.498
+                ly = box["y"] + box["height"] * 0.932
+                await page.mouse.click(lx, ly)
+                RESULT["notes"].append(f"clicked_lobby@{lx:.0f},{ly:.0f}")
+                await page.wait_for_timeout(6000)
+                await close_ads("after-lobby", tries=6)
+                await page.wait_for_timeout(3000)
+                await page.screenshot(path=f"{OUT_DIR}/lobby.png", full_page=False)
         except Exception as e:
             RESULT["notes"].append(f"ok_click_err:{e}")
 
