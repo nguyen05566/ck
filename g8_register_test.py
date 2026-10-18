@@ -91,7 +91,7 @@ async def main() -> int:
 
         print(f"[1] open {PAGE_URL}", flush=True)
         await page.goto(PAGE_URL, wait_until="domcontentloaded", timeout=90000)
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(5000)
 
         # cookie/consent nếu có
         await click_if_present(page, [
@@ -100,26 +100,74 @@ async def main() -> int:
         ])
 
         print("[2] click Sign Up", flush=True)
+        # diagnostic: liệt kê button/link nhìn thấy được
+        try:
+            texts = await page.locator("button, a[role='button'], a").all_inner_texts()
+            uniq = []
+            for t in texts:
+                t = " ".join(t.split())
+                if t and t not in uniq:
+                    uniq.append(t)
+            print("[diag] interactive texts:", uniq[:40], flush=True)
+        except Exception as e:
+            print(f"[diag] list failed: {e}", flush=True)
+        await page.screenshot(path=f"{OUT_DIR}/step-initial.png", full_page=False)
+
+        async def modal_ready() -> bool:
+            return await page.locator('input[placeholder="First Name"]').count() > 0
+
         opened = False
-        for sel in [
+        strategies = [
             'header button:has-text("Sign Up")',
             'button:has-text("Sign Up")',
             'a:has-text("Sign Up")',
-        ]:
+            'button:has-text("Sign In")',
+            'a:has-text("Sign In")',
+            'button:has-text("Log in")',
+            'a:has-text("Log in")',
+            '[aria-label*="account" i]',
+            '[aria-label*="user" i]',
+            'button:has-text("Sign up")',
+        ]
+        for sel in strategies:
             try:
                 loc = page.locator(sel).first
-                if await loc.count():
-                    await loc.click(timeout=4000)
-                    await page.wait_for_timeout(2500)
-                    if await page.locator('input[placeholder="First Name"]').count():
-                        opened = True
-                        break
-            except Exception:
-                continue
+                if not await loc.count():
+                    continue
+                if not await loc.is_visible():
+                    continue
+                print(f"[2] try {sel}", flush=True)
+                await loc.click(timeout=4000)
+                await page.wait_for_timeout(2500)
+                if await modal_ready():
+                    opened = True
+                    break
+                # modal Login mở ra? bấm link Sign Up bên trong
+                for inner in [
+                    'a:has-text("Sign Up")', 'button:has-text("Sign Up")',
+                    'a:has-text("Register")', 'text=Create account',
+                ]:
+                    try:
+                        iloc = page.locator(inner).first
+                        if await iloc.count() and await iloc.is_visible():
+                            await iloc.click(timeout=3000)
+                            await page.wait_for_timeout(2000)
+                            if await modal_ready():
+                                opened = True
+                                break
+                    except Exception:
+                        continue
+                if opened:
+                    break
+            except Exception as e:
+                print(f"[2] {sel} fail: {e}", flush=True)
         RESULT["modal_opened"] = opened
         if not opened:
             print("[!] modal Sign Up không mở được", flush=True)
             await page.screenshot(path=f"{OUT_DIR}/fail-no-modal.png", full_page=True)
+            with open(f"{OUT_DIR}/result.json", "w") as f:
+                json.dump(RESULT, f, indent=2, ensure_ascii=False)
+            print("RESULT " + json.dumps(RESULT, ensure_ascii=False), flush=True)
             await browser.close()
             return 0
 
