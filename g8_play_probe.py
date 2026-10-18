@@ -78,21 +78,21 @@ async def main() -> int:
                 print(f"[!] {sel}: {e}", flush=True)
 
         # pre-roll / fullscreen ad — Close nằm TRONG iframe chéo-origin của ad
-        for i in range(22):
-            await page.wait_for_timeout(2000)
-            closed = False
-            for fr in page.frames:
-                try:
-                    loc = fr.get_by_text("Close", exact=True).first
-                    if await loc.count():
-                        await loc.click(timeout=1200)
-                        RESULT["notes"].append(f"closed_ad@{i*2}s frame={fr.url[:60]}")
-                        closed = True
-                        break
-                except Exception:
-                    continue
-            if closed:
-                break
+        async def close_ads(tag, tries=22):
+            for i in range(tries):
+                await page.wait_for_timeout(2000)
+                for fr in page.frames:
+                    try:
+                        loc = fr.get_by_text("Close", exact=True).first
+                        if await loc.count():
+                            await loc.click(timeout=1200)
+                            RESULT["notes"].append(f"closed_ad[{tag}]@{i*2}s")
+                            return True
+                    except Exception:
+                        continue
+            return False
+
+        await close_ads("first")
 
         await page.wait_for_timeout(15000)
 
@@ -120,6 +120,10 @@ async def main() -> int:
                 RESULT["notes"].append(f"clicked_ok@{x:.0f},{y:.0f}")
                 await page.wait_for_timeout(4000)
                 await page.screenshot(path=f"{OUT_DIR}/after-ok.png", full_page=False)
+                # ad thứ 2 có thể hiện sau khi OK — đóng rồi chụp menu
+                await close_ads("second", tries=15)
+                await page.wait_for_timeout(5000)
+                await page.screenshot(path=f"{OUT_DIR}/menu.png", full_page=False)
         except Exception as e:
             RESULT["notes"].append(f"ok_click_err:{e}")
 
