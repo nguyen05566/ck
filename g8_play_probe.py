@@ -81,23 +81,45 @@ async def main() -> int:
         async def close_ads(tag, tries=22):
             for i in range(tries):
                 await page.wait_for_timeout(2000)
+                # 1) tìm text Close trong mọi frame
                 for fr in page.frames:
                     try:
-                        # match lỏng — text thật có thể "Close" + khoảng trắng/icon
                         loc = fr.locator("text=Close").first
                         if await loc.count() and await loc.is_visible():
-                            box = await loc.bounding_box()
-                            if box and box["width"] < 200:
+                            b = await loc.bounding_box()
+                            if b and b["width"] < 200:
                                 await loc.click(timeout=1200)
                                 RESULT["notes"].append(f"closed_ad[{tag}]@{i*2}s")
                                 return True
                     except Exception:
                         continue
+                # 2) fallback: bấm góc trên-phải của iframe fullscreen lớn nhất
+                #    (Close luôn nằm ~20px phía trên góc phải khung ad)
+                if i % 3 == 2:
+                    try:
+                        best = None
+                        for el in await page.query_selector_all("iframe"):
+                            b = await el.bounding_box()
+                            if b and b["width"] > 600 and b["height"] > 300:
+                                if not best or b["width"] * b["height"] > best["width"] * best["height"]:
+                                    best = b
+                        if best:
+                            cx = best["x"] + best["width"] - 20
+                            cy = best["y"] - 20
+                            await page.mouse.click(cx, cy)
+                            RESULT["notes"].append(f"corner_click[{tag}]@{i*2}s@{cx:.0f},{cy:.0f}")
+                    except Exception as e:
+                        RESULT["notes"].append(f"corner_err:{e}")
             return False
 
         await close_ads("first")
 
         await page.wait_for_timeout(15000)
+
+        # nếu ad vẫn còn → đóng thêm lần nữa trước khi chờ iframe
+        if await page.locator("#gameContainer iframe").count() == 0:
+            await close_ads("first-retry", tries=10)
+            await page.wait_for_timeout(8000)
 
         # iframe trong #gameContainer
         try:
