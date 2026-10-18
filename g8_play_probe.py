@@ -77,26 +77,21 @@ async def main() -> int:
             except Exception as e:
                 print(f"[!] {sel}: {e}", flush=True)
 
-        # pre-roll / fullscreen ad — thử nhiều kiểu Close trong ~45s
+        # pre-roll / fullscreen ad — Close nằm TRONG iframe chéo-origin của ad
         for i in range(22):
             await page.wait_for_timeout(2000)
-            clicked = False
-            for loc in [
-                page.get_by_text("Close", exact=True),
-                page.locator('[aria-label="Close"]'),
-                page.locator('button:has-text("Close")'),
-                page.locator('div:has-text("Close")'),
-            ]:
+            closed = False
+            for fr in page.frames:
                 try:
-                    first = loc.first
-                    if await first.count() and await first.is_visible():
-                        await first.click(timeout=1500)
-                        RESULT["notes"].append(f"closed_ad@{i*2}s")
-                        clicked = True
+                    loc = fr.get_by_text("Close", exact=True).first
+                    if await loc.count():
+                        await loc.click(timeout=1200)
+                        RESULT["notes"].append(f"closed_ad@{i*2}s frame={fr.url[:60]}")
+                        closed = True
                         break
                 except Exception:
                     continue
-            if clicked:
+            if closed:
                 break
 
         await page.wait_for_timeout(15000)
