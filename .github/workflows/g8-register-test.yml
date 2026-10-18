@@ -1,0 +1,39 @@
+name: g8-register-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-signup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Run signup test (18+ birthDate, fake email)
+        run: |
+          mkdir -p /tmp/g8-test
+          python3 -u g8_register_test.py
+          echo "exit=$?"
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g8-signup-test
+          path: /tmp/g8-test/
+          retention-days: 7
