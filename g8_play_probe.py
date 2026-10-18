@@ -77,23 +77,29 @@ async def main() -> int:
             except Exception as e:
                 print(f"[!] {sel}: {e}", flush=True)
 
-        # pre-roll ad có thể chặn — chờ rồi thử skip
-        await page.wait_for_timeout(6000)
-        for sel in [
-            'button:has-text("Skip")', 'text=Skip', 'button:has-text("Close")',
-            '[aria-label*="close" i]', '[aria-label*="skip" i]',
-            '.g8plugin-promo button',
-        ]:
-            try:
-                loc = page.locator(sel).first
-                if await loc.count() and await loc.is_visible():
-                    await loc.click(timeout=2000)
-                    RESULT["notes"].append(f"skipped:{sel}")
-                    break
-            except Exception:
-                continue
+        # pre-roll / fullscreen ad — thử nhiều kiểu Close trong ~45s
+        for i in range(22):
+            await page.wait_for_timeout(2000)
+            clicked = False
+            for loc in [
+                page.get_by_text("Close", exact=True),
+                page.locator('[aria-label="Close"]'),
+                page.locator('button:has-text("Close")'),
+                page.locator('div:has-text("Close")'),
+            ]:
+                try:
+                    first = loc.first
+                    if await first.count() and await first.is_visible():
+                        await first.click(timeout=1500)
+                        RESULT["notes"].append(f"closed_ad@{i*2}s")
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+            if clicked:
+                break
 
-        await page.wait_for_timeout(30000)
+        await page.wait_for_timeout(15000)
 
         # iframe trong #gameContainer
         try:
