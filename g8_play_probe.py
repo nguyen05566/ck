@@ -109,8 +109,7 @@ async def main() -> int:
 
         # Game là canvas — bấm nút OK (Profile customization) theo tọa độ
         try:
-            fr = page.frame_locator("#gameContainer iframe")
-            el = await fr.element_handle()
+            el = page.locator("#gameContainer iframe").first
             box = await el.bounding_box()
             RESULT["notes"].append(f"iframe_box={box}")
             if box:
