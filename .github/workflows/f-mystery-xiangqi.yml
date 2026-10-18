@@ -28,28 +28,57 @@ jobs:
       - name: Setup Cloudflare WARP (1.1.1.1)
         run: |
           set +e
-          echo "=== Setup WARP (wgcf + WireGuard) ==="
+          echo "=== Setup WARP (wgcf + WireGuard) — IP cố định cả phiên job ==="
           cd /tmp
           sudo apt-get update -qq
           sudo apt-get install -y -qq wireguard
           curl -fsSL -o /tmp/wgcf https://github.com/ViRb3/wgcf/releases/download/v2.2.22/wgcf_2.2.22_linux_amd64
           chmod +x /tmp/wgcf
-          /tmp/wgcf register --accept-tos
-          /tmp/wgcf generate
-          # wgcf generate thanh cong -> wgcf-profile.conf o CWD (/tmp)
-          # Bo DNS= de tranh wg-quick fail vi thieu resolvconf tren runner
+          # 1 lần / job — KHÔNG register lại giữa run (IP giữ nguyên tới hết job)
+          if [ ! -f /tmp/wgcf-profile.conf ]; then
+            /tmp/wgcf register --accept-tos
+            /tmp/wgcf generate
+          fi
           sed -i '/^DNS=/d' /tmp/wgcf-profile.conf
+          # Keepalive 25s: tunnel không idle-flap → IP không đổi giữa claim/transfer
+          if ! grep -q 'PersistentKeepalive' /tmp/wgcf-profile.conf; then
+            echo 'PersistentKeepalive = 25' >> /tmp/wgcf-profile.conf
+          fi
           sudo cp /tmp/wgcf-profile.conf /etc/wireguard/warp.conf
+          if sudo wg-quick down warp 2>/dev/null; then sleep 1; fi
           if sudo wg-quick up warp; then
             sleep 3
+            IP0=$(curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | awk -F= '/^ip=/{print $2}')
+            echo "$IP0" > /tmp/warp_ip_session.txt
             echo "=== Verify WARP ==="
             curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp|loc)=' || echo "WARN: khong trace duoc"
+            echo "WARP_SESSION_IP=${IP0}"
             echo "WARP_STATUS=up"
           else
             echo "WARN: wg-quick up that bai — bot van chay direct"
             echo "WARP_STATUS=direct"
           fi
           cd "$GITHUB_WORKSPACE"
+
+
+      - name: Recheck WARP IP (phải khớp start — không đổi giữa phiên)
+        run: |
+          if [ -f /tmp/warp_ip_session.txt ]; then
+            IP1=$(cat /tmp/warp_ip_session.txt)
+            IP2=$(curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | awk -F= '/^ip=/{print $2}')
+            echo "session_start=${IP1} now=${IP2}"
+            if [ -n "$IP1" ] && [ "$IP1" != "$IP2" ]; then
+              echo "WARN: IP đổi giữa phiên ${IP1} -> ${IP2} — thử up lại warp cùng account"
+              sudo wg-quick down warp 2>/dev/null || true
+              sudo wg-quick up warp || true
+              sleep 3
+              IP3=$(curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | awk -F= '/^ip=/{print $2}')
+              echo "after_restart=${IP3}"
+              # vẫn giữ account cũ — IP có thể về CGNAT pool, chỉ log
+            fi
+          else
+            echo "no session ip file"
+          fi
 
       - name: Run f-mystery-xiangqi
         env:
