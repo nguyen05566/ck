@@ -4,6 +4,7 @@
   "_optional_usage": "Muốn dùng xoay vòng: set DEST_ROTATION=true trong yml. Khi đó pick_next_dest() sẽ hash tên cookie_file để pick 1 dest cố định per-cookie từ list dưới.",
   "dests": [
     71391343,
-    68307415
+    68307415,
+    68952067
   ]
 }
