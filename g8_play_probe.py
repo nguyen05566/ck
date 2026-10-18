@@ -83,11 +83,14 @@ async def main() -> int:
                 await page.wait_for_timeout(2000)
                 for fr in page.frames:
                     try:
-                        loc = fr.get_by_text("Close", exact=True).first
-                        if await loc.count():
-                            await loc.click(timeout=1200)
-                            RESULT["notes"].append(f"closed_ad[{tag}]@{i*2}s")
-                            return True
+                        # match lỏng — text thật có thể "Close" + khoảng trắng/icon
+                        loc = fr.locator("text=Close").first
+                        if await loc.count() and await loc.is_visible():
+                            box = await loc.bounding_box()
+                            if box and box["width"] < 200:
+                                await loc.click(timeout=1200)
+                                RESULT["notes"].append(f"closed_ad[{tag}]@{i*2}s")
+                                return True
                     except Exception:
                         continue
             return False
