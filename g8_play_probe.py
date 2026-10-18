@@ -16,15 +16,24 @@ NET = []          # {url, method, status, type}
 SEEN = set()
 RESULT = {"requests": [], "hosts": {}, "game_iframe": None, "notes": []}
 
+AD_HOSTS = (
+    "googlesyndication", "doubleclick", "googleads", "gstatic",
+    "google-analytics", "googleapis", "cloudflareinsights", "googlevideo",
+    "ytimg", "adtrafficquality", "googleadservices", "fundingchoices",
+    "googletagmanager", "google.com", "googleusercontent",
+)
+
 
 def record(rtype, url, method="", status=None):
+    if any(h in url for h in AD_HOSTS):
+        return
     key = (rtype, method, url)
     if key in SEEN:
         return
     SEEN.add(key)
     host = re.sub(r"^(https?|wss?)://([^/]+).*$", r"\2", url)
     RESULT["hosts"][host] = RESULT["hosts"].get(host, 0) + 1
-    NET.append({"type": rtype, "method": method, "status": status, "url": url[:300]})
+    NET.append({"type": rtype, "method": method, "status": status, "url": url[:400]})
 
 
 async def main() -> int:
@@ -68,34 +77,49 @@ async def main() -> int:
             except Exception as e:
                 print(f"[!] {sel}: {e}", flush=True)
 
-        await page.wait_for_timeout(15000)
+        # pre-roll ad có thể chặn — chờ rồi thử skip
+        await page.wait_for_timeout(6000)
+        for sel in [
+            'button:has-text("Skip")', 'text=Skip', 'button:has-text("Close")',
+            '[aria-label*="close" i]', '[aria-label*="skip" i]',
+            '.g8plugin-promo button',
+        ]:
+            try:
+                loc = page.locator(sel).first
+                if await loc.count() and await loc.is_visible():
+                    await loc.click(timeout=2000)
+                    RESULT["notes"].append(f"skipped:{sel}")
+                    break
+            except Exception:
+                continue
 
-        # iframe sau khi play
-        frames = []
-        for f in page.frames:
-            frames.append(f.url[:200])
+        await page.wait_for_timeout(30000)
+
+        # iframe trong #gameContainer
+        try:
+            srcs = await page.eval_on_selector_all(
+                "#gameContainer iframe",
+                "els => els.map(e => e.src)",
+            )
+            RESULT["game_iframe"] = srcs
+            RESULT["notes"].append(f"gameContainer_iframes={len(srcs)}")
+        except Exception as e:
+            RESULT["notes"].append(f"iframe_err:{e}")
+
+        frames = [f.url[:200] for f in page.frames]
         RESULT["frames"] = frames
         RESULT["notes"].append(f"main={page.url[:120]}")
 
-        # text trong game container
-        try:
-            gc = page.locator("#gameContainer, .game-frame, iframe")
-            RESULT["notes"].append("game_el=" + str(await gc.count()))
-        except Exception:
-            pass
-
-        RESULT["requests"] = NET[:200]
+        RESULT["requests"] = NET
         with open(f"{OUT_DIR}/play-probe.json", "w") as fh:
             json.dump(RESULT, fh, indent=2, ensure_ascii=False)
         print("HOSTS " + json.dumps(RESULT["hosts"], ensure_ascii=False), flush=True)
-        interesting = [
-            r for r in NET
-            if any(k in r["url"].lower() for k in (
-                "ws", "room", "match", "table", "lobby", "game", "player",
-                "session", "socket", "channel", "queue",
-            ))
-        ]
-        print("INTERESTING " + json.dumps(interesting[:40], ensure_ascii=False), flush=True)
+        print("NOTES " + json.dumps(RESULT["notes"], ensure_ascii=False), flush=True)
+        print("GAME_IFRAME " + json.dumps(RESULT.get("game_iframe"), ensure_ascii=False), flush=True)
+        for r in NET:
+            u = r["url"]
+            if any(k in u for k in ("/api/", "e6cf", "ws", "index.html", "session", "auth")):
+                print("REQ " + json.dumps(r, ensure_ascii=False), flush=True)
         await page.screenshot(path=f"{OUT_DIR}/play-final.png", full_page=False)
         await browser.close()
     return 0
