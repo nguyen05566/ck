@@ -107,6 +107,23 @@ async def main() -> int:
         except Exception as e:
             RESULT["notes"].append(f"iframe_err:{e}")
 
+        # Game là canvas — bấm nút OK (Profile customization) theo tọa độ
+        try:
+            fr = page.frame_locator("#gameContainer iframe")
+            el = await fr.element_handle()
+            box = await el.bounding_box()
+            RESULT["notes"].append(f"iframe_box={box}")
+            if box:
+                # OK ~ 49.8% ngang, 75.8% dọc khung game (viewport 1366x900 cố định)
+                x = box["x"] + box["width"] * 0.498
+                y = box["y"] + box["height"] * 0.758
+                await page.mouse.click(x, y)
+                RESULT["notes"].append(f"clicked_ok@{x:.0f},{y:.0f}")
+                await page.wait_for_timeout(4000)
+                await page.screenshot(path=f"{OUT_DIR}/after-ok.png", full_page=False)
+        except Exception as e:
+            RESULT["notes"].append(f"ok_click_err:{e}")
+
         frames = [f.url[:200] for f in page.frames]
         RESULT["frames"] = frames
         RESULT["notes"].append(f"main={page.url[:120]}")
@@ -119,7 +136,7 @@ async def main() -> int:
         print("GAME_IFRAME " + json.dumps(RESULT.get("game_iframe"), ensure_ascii=False), flush=True)
         for r in NET:
             u = r["url"]
-            if any(k in u for k in ("/api/", "e6cf", "ws", "index.html", "session", "auth")):
+            if any(k in u for k in ("/api/", "e6cf", "ws", "index.html", "session", "auth", "chess.game8.io")):
                 print("REQ " + json.dumps(r, ensure_ascii=False), flush=True)
         await page.screenshot(path=f"{OUT_DIR}/play-final.png", full_page=False)
         await browser.close()
