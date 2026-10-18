@@ -1,0 +1,32 @@
+name: g8-play-probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+      - name: Probe chess play network
+        run: |
+          mkdir -p /tmp/g8-test
+          python3 -u g8_play_probe.py
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g8-play-probe
+          path: /tmp/g8-test/
+          retention-days: 7
