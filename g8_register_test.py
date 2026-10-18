@@ -53,8 +53,20 @@ async def handle_recaptcha(page) -> None:
                 anchor = f.locator("#recaptcha-anchor")
                 if await anchor.count():
                     await anchor.click(timeout=3000)
-                    await page.wait_for_timeout(4000)
-                    RESULT["recaptcha_seen"] = "clicked-checkbox"
+                    await page.wait_for_timeout(5000)
+                    checked = await anchor.get_attribute("aria-checked")
+                    # có frame challenge (ảnh) không?
+                    bframes = [
+                        fr for fr in page.frames
+                        if "bframe" in (fr.url or "") or "recaptcha/bframe" in (fr.url or "")
+                    ]
+                    challenge = False
+                    if bframes:
+                        try:
+                            challenge = await bframes[0].locator("img, .rc-imageselect-challenge").count() > 0
+                        except Exception:
+                            challenge = True
+                    RESULT["recaptcha_seen"] = f"clicked anchor checked={checked} challenge={challenge}"
                     return
             except Exception:
                 continue
@@ -190,8 +202,12 @@ async def main() -> int:
 
         print("[5] submit Sign Up", flush=True)
         try:
-            submit = page.locator('button:has-text("Sign Up")').last
-            await submit.click(timeout=5000)
+            submit = page.locator('button[type="submit"]:has-text("Sign Up")').last
+            # overlay có thể chặn pointer — dùng JS click trực tiếp
+            await submit.evaluate("el => el.click()")
+            await page.wait_for_timeout(1000)
+            if RESULT["register_status"] is None:
+                await submit.dispatch_event("click")
         except Exception as e:
             print(f"[!] submit click failed: {e}", flush=True)
 
@@ -203,20 +219,26 @@ async def main() -> int:
             # thử lần nữa bấm submit nếu chưa có response (token recaptcha xong mới gửi)
             if RESULT["register_status"] is None and _ == 8:
                 try:
-                    await page.locator('button:has-text("Sign Up")').last.click(timeout=2000)
+                    await page.locator('button[type="submit"]:has-text("Sign Up")').last.evaluate(
+                        "el => el.click()"
+                    )
                 except Exception:
                     pass
 
         # error text hiển thị trên modal (nếu có)
         try:
-            body_text = await page.locator("body").inner_text(timeout=3000)
+            scope = page.locator("form, [role='dialog'], dialog").first
+            if not await scope.count():
+                scope = page.locator("body")
+            body_text = await scope.inner_text(timeout=3000)
             for line in body_text.splitlines():
+                line = line.strip()
                 low = line.lower()
-                if any(k in low for k in (
+                if 0 < len(line) <= 160 and any(k in low for k in (
                     "error", "invalid", "already", "failed", "16 year",
-                    "18 year", "recaptcha", "captcha", "required", "not valid",
+                    "18 year", "captcha", "required", "not valid", "taken",
                 )):
-                    RESULT["visible_error"] = line.strip()[:300]
+                    RESULT["visible_error"] = line[:300]
                     break
         except Exception:
             pass
