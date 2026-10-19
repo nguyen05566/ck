@@ -87,7 +87,7 @@ jobs:
           COOLDOWN: '3'
           REST_BETWEEN_RUNS: '5'
           MAX_RUNTIME: '21000'
-          TRANSFER_DEST_ID: '71747365'
+          TRANSFER_DEST_ID: '71394079'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
           MAX_CLAIMS_PER_DAY: '120'
