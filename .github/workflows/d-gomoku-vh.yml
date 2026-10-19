@@ -2,6 +2,7 @@ name: d-gomoku-vh
 
 on:
   workflow_dispatch:
+    if: false
 
 permissions:
   actions: write

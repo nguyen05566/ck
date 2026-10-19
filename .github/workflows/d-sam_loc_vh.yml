@@ -2,6 +2,7 @@ name: d-sam_loc_vh
 
 on:
   workflow_dispatch:
+    if: false
 
 permissions:
   actions: write
