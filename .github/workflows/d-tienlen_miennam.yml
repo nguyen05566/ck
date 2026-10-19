@@ -2,7 +2,6 @@ name: d-tienlen_miennam
 
 on:
   workflow_dispatch:
-    if: false
 
 permissions:
   actions: write

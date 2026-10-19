@@ -2,7 +2,6 @@ name: d-phom_tala
 
 on:
   workflow_dispatch:
-    if: false
 
 permissions:
   actions: write
