@@ -9,8 +9,9 @@ name: hybrid-parallel
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
+  # Tạm dừng chạy tự động. Bỏ comment 2 dòng dưới để bật lại lịch chạy 6 giờ/lần.
+  # schedule:
+  #   - cron: '0 */6 * * *'
 
 permissions:
   actions: write
