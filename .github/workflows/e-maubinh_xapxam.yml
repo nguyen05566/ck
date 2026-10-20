@@ -25,25 +25,6 @@ jobs:
           pip install playwright websocket-client psutil requests
           playwright install chromium --with-deps
 
-      - name: Recheck WARP IP (phải khớp start — không đổi giữa phiên)
-        run: |
-          if [ -f /tmp/warp_ip_session.txt ]; then
-            IP1=$(cat /tmp/warp_ip_session.txt)
-            IP2=$(curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | awk -F= '/^ip=/{print $2}')
-            echo "session_start=${IP1} now=${IP2}"
-            if [ -n "$IP1" ] && [ "$IP1" != "$IP2" ]; then
-              echo "WARN: IP đổi giữa phiên ${IP1} -> ${IP2} — thử up lại warp cùng account"
-              sudo wg-quick down warp 2>/dev/null || true
-              sudo wg-quick up warp || true
-              sleep 3
-              IP3=$(curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | awk -F= '/^ip=/{print $2}')
-              echo "after_restart=${IP3}"
-              # vẫn giữ account cũ — IP có thể về CGNAT pool, chỉ log
-            fi
-          else
-            echo "no session ip file"
-          fi
-
       - name: Run e-maubinh_xapxam
         env:
           MAX_CLAIMS: '40'
