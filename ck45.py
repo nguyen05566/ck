@@ -35,6 +35,12 @@ except Exception as e:
 
 from playwright.sync_api import sync_playwright
 
+try:
+    import ws_bridge
+except Exception as _e:
+    print(f"[WARN] Không nạp được ws_bridge.py: {_e}", flush=True)
+    ws_bridge = None
+
 # ============================================================
 # CONFIG
 # ============================================================
@@ -308,6 +314,17 @@ class GameSession:
                 return True
             time.sleep(3)
         return False
+
+    # ---------- ws capture ----------
+    def ws_capture(self, limit=0):
+        if not ws_bridge:
+            return []
+        return ws_bridge.capture_frames(self.page, limit=limit)
+
+    def ws_send(self, payload, sock_index=0):
+        if not ws_bridge:
+            return {"ok": False, "error": "no ws_bridge"}
+        return ws_bridge.send_raw(self.page, payload, sock_index)
 
     # ---------- health ----------
     def check_page_health(self):
@@ -585,7 +602,9 @@ def run_session(p, fb_cookies, session_id, started_at):
     Trả về (reward, transferred, ok, fail, cookie_ok)."""
     log(f"\n########## SESSION {session_id} ##########")
 
-    browser = None
+    context = None
+    page = None
+    profile_dir = None
     total_reward = 0
     total_transferred = 0
     ok = 0
@@ -597,10 +616,6 @@ def run_session(p, fb_cookies, session_id, started_at):
         fp = al.get_or_create_fingerprint(SINGLE_COOKIE_FILE) if al else None
         log(f"[ANTI-BAN] Fingerprint: UA={fp['user_agent'][:60]}... viewport={fp['viewport']} locale={fp['locale'] if fp else 'en-US'}" if fp else "[ANTI-BAN] Module anti_lock không khả dụng — chạy mode cũ")
 
-        browser = p.chromium.launch(
-            headless=HEADLESS,
-            args=al.stealth_launch_args() if al else ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
-        )
         context_kwargs = {
             "viewport": fp["viewport"] if fp else {"width": 1920, "height": 1080},
             "locale":   fp["locale"]   if fp else "en-US",
@@ -612,7 +627,25 @@ def run_session(p, fb_cookies, session_id, started_at):
         }
         # Xóa None values để Playwright không phàn nàn
         context_kwargs = {k: v for k, v in context_kwargs.items() if v is not None}
-        context = browser.new_context(**context_kwargs)
+
+        # [PRIVACY] Chế độ riêng tư: context riêng trên profile tạm, tự xoá sau phiên
+        context, profile_dir = ws_bridge.launch_private_context(
+            p,
+            headless=HEADLESS,
+            args=al.stealth_launch_args() if al else ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+            context_kwargs=context_kwargs,
+        )
+
+        # Xoá cache / lịch sử / storage còn sót lại trước khi nạp cookie
+        try:
+            _priv_page = context.new_page()
+            ws_bridge.wipe_storage(context, _priv_page)
+            _priv_page.close()
+        except Exception as e:
+            log(f"  [PRIVACY] wipe storage fail: {e}")
+
+        # [WS] Bật bắt WebSocket từ đầu phiên
+        ws_bridge.install_ws_hook(context)
 
         # ===== [ANTI-BAN] Inject stealth JS vào mọi frame trước khi load =====
         if al and fp:
@@ -891,9 +924,24 @@ def run_session(p, fb_cookies, session_id, started_at):
         log(f"\n[SESSION {session_id}] ⚠ Lỗi không mong đợi: {type(e).__name__}: {str(e)[:160]}")
     finally:
         try:
-            if browser:
-                browser.close()
-                log("  🧹 Đã đóng browser")
+            if context:
+                try:
+                    if ws_bridge and page is not None:
+                        _frames = ws_bridge.capture_frames(page)
+                        _cmds = ws_bridge.capture_commands(page)
+                        log(f"  🔎 [WS] Bắt được {len(_frames)} frame / {len(_cmds)} lệnh")
+                except Exception:
+                    pass
+                try:
+                    if ws_bridge:
+                        ws_bridge.wipe_storage(context, page)
+                except Exception:
+                    pass
+                if ws_bridge:
+                    ws_bridge.close_private_context(context, profile_dir)
+                else:
+                    context.close()
+                log("  🧹 Đã đóng browser + xoá private profile")
         except Exception:
             pass
 

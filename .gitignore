@@ -24,3 +24,8 @@ test-results/
 
 # Test artifact
 ck_test.txt
+
+# Output bắt websocket (frame đã decode) — không commit
+ws_out/
+ws_frames.json
+ws_frames.bin
