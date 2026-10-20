@@ -21,7 +21,7 @@ jobs:
 
     env:
       GROUP_BOTS: "ck24.py ck25.py ck26.py ck27.py ck28.py ck29.py ck30.py ck31.py ck32.py ck33.py"
-      TRANSFER_DEST_ID: '71961699'
+      TRANSFER_DEST_ID: '68859162'
 
     steps:
       - uses: actions/checkout@v4
