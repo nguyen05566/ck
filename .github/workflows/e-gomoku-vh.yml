@@ -2,6 +2,11 @@ name: e-gomoku-vh
 
 on:
   workflow_dispatch:
+    inputs:
+      TRANSFER_DEST_ID:
+        description: "Transfer destination ID"
+        required: false
+        default: "71961649"
 
 permissions:
   actions: write
@@ -32,7 +37,7 @@ jobs:
           COOLDOWN: '3'
           REST_BETWEEN_RUNS: '5'
           MAX_RUNTIME: '21000'
-          TRANSFER_DEST_ID: '71961649'
+          TRANSFER_DEST_ID: ${{ github.event.inputs.TRANSFER_DEST_ID || '71961649' }}
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
           MAX_CLAIMS_PER_DAY: '120'
