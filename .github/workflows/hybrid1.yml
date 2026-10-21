@@ -6,6 +6,11 @@ name: hybrid1
 
 on:
   workflow_dispatch:
+    inputs:
+      TRANSFER_DEST_ID:
+        description: "Transfer destination ID"
+        required: false
+        default: "71961672"
 
 permissions:
   actions: write
@@ -21,7 +26,7 @@ jobs:
 
     env:
       GROUP_BOTS: "ck1.py ck2.py ck3.py ck5.py ck6.py ck7.py ck8.py ck9.py ck10.py ck12.py"
-      TRANSFER_DEST_ID: '71961672'
+      TRANSFER_DEST_ID: ${{ github.event.inputs.TRANSFER_DEST_ID || '71961672' }}
 
     steps:
       - uses: actions/checkout@v4
