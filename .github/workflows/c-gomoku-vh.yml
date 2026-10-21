@@ -1,4 +1,5 @@
 name: c-gomoku-vh
+disabled: true
 
 on:
   workflow_dispatch:

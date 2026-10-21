@@ -1,4 +1,5 @@
 name: c-mystery-xiangqi
+disabled: true
 
 on:
   workflow_dispatch:

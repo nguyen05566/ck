@@ -1,4 +1,5 @@
 name: e-tienlen_miennam
+disabled: true
 
 on:
   workflow_dispatch:

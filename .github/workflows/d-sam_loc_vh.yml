@@ -1,4 +1,5 @@
 name: d-sam_loc_vh
+disabled: true
 
 on:
   workflow_dispatch:

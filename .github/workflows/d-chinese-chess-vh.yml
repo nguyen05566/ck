@@ -1,4 +1,5 @@
 name: d-chinese-chess-vh
+disabled: true
 
 on:
   workflow_dispatch:
