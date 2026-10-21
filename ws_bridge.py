@@ -13,7 +13,9 @@ Mô hình theo arena10k.py (vht): đăng nhập xong bắt socket, đọc/gửi 
 import base64
 import os
 import shutil
+import struct
 import tempfile
+import time
 
 WS_HOOK_JS = r"""
 (() => {
@@ -325,6 +327,105 @@ def replay_frame(page, frame_index, sock_index=0):
     except Exception as e:
         return {"ok": False, "error": str(e)}
     return send_raw(page, payload, sock_index)
+
+
+# ============================================================
+# LỆNH THÔ (raw command)
+# ------------------------------------------------------------
+# Frame của game: [2 byte cmd id big-endian] + payload
+#   VIDEO_REWARD 0x015B : payload = byte 0 (0 = query, 1 = claim)
+#                        response = status(1) + int64 amount
+#   TRANSFER     0x013D : payload = int64 destId + int64 amount
+#                        response = status(1) + string (length-prefixed)
+#   PUSH balance 0x01AF : status(1) + int64 balance
+# ============================================================
+CMD_VIDEO_REWARD = 0x015B
+CMD_TRANSFER = 0x013D
+CMD_BALANCE_PUSH = 0x01AF
+
+
+def pack_cmd(cmd_id, payload=b""):
+    """Đóng gói lệnh thô: 2 byte cmd id big-endian + payload."""
+    return struct.pack(">H", cmd_id) + payload
+
+
+def pack_long(value):
+    """writeLong của client = int64 big-endian (8 byte)."""
+    return struct.pack(">q", int(value))
+
+
+def send_raw_cmd(page, cmd_id, payload=b"", timeout=15.0, sock_index=0):
+    """Gửi lệnh thô lên socket game, chờ frame trả lời có cùng cmd id."""
+    start = len(capture_frames(page))
+    res = send_raw(page, pack_cmd(cmd_id, payload), sock_index)
+    if not res.get("ok"):
+        return {"ok": False, "error": res.get("error", "send failed")}
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for fr in capture_frames(page)[start:]:
+            if fr.get("dir") != "in" or fr.get("type") != "bin":
+                continue
+            try:
+                b = base64.b64decode(fr["data"])
+            except Exception:
+                continue
+            if len(b) >= 2 and struct.unpack(">H", b[:2])[0] == cmd_id:
+                return {"ok": True, "status": b[2] if len(b) > 2 else 0,
+                        "data": b[2:], "raw": b, "start": start}
+        time.sleep(0.4)
+    return {"ok": False, "error": "timeout", "start": start}
+
+
+def parse_video_reward(resp):
+    """Parse response VIDEO_REWARD: status(1) + int64 amount."""
+    status = resp.get("status", 1)
+    data = resp.get("data") or b""
+    amount = 0
+    if len(data) >= 9:
+        try:
+            amount = struct.unpack(">q", data[1:9])[0]
+        except Exception:
+            amount = 0
+    return {"ok": status == 0, "status": status, "amount": amount,
+            "error": "" if status == 0 else f"status={status}"}
+
+
+def parse_transfer(resp):
+    """Parse response TRANSFER: status(1) + string (1 byte len + utf-16)."""
+    status = resp.get("status", 1)
+    data = resp.get("data") or b""
+    msg = ""
+    if len(data) >= 2:
+        n = data[1]
+        raw = data[2:2 + n]
+        if raw:
+            try:
+                msg = raw.decode("utf-16-le", "ignore")
+            except Exception:
+                msg = ""
+    return {"ok": status == 0, "status": status, "message": msg,
+            "error": "" if status == 0 else (msg or f"status={status}")}
+
+
+def wait_balance_push(page, start, timeout=3.0):
+    """Đợi push balance (cmd 0x01AF) và trả về balance server (int) hoặc None."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for fr in capture_frames(page)[start:]:
+            if fr.get("dir") != "in" or fr.get("type") != "bin":
+                continue
+            try:
+                b = base64.b64decode(fr["data"])
+            except Exception:
+                continue
+            if len(b) >= 11 and struct.unpack(">H", b[:2])[0] == CMD_BALANCE_PUSH:
+                try:
+                    # push balance: cmd(2) + status(1) + int64 balance
+                    return struct.unpack(">q", b[3:11])[0]
+                except Exception:
+                    return None
+        time.sleep(0.3)
+    return None
 
 
 def dump_frames(frames, out_dir="."):

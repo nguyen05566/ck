@@ -55,6 +55,7 @@ HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
 TRANSFER_DEST_ID = int(os.environ.get("TRANSFER_DEST_ID", "51977054"))
 TRANSFER_ENABLED = os.environ.get("TRANSFER_ENABLED", "true").lower() == "true"
 PRE_CLAIM_TRANSFER_THRESHOLD = int(os.environ.get("PRE_CLAIM_TRANSFER_THRESHOLD", "10000"))
+RAW_CMD = os.environ.get("RAW_CMD", "false").lower() == "true"   # gửi lệnh thô (raw WS) thay vì lệnh qua UI game
 
 SINGLE_COOKIE_FILE = os.environ.get("SINGLE_COOKIE_FILE", "b.txt").strip()
 
@@ -478,13 +479,15 @@ JS_TRANSFER = """(destId) => new Promise((resolve) => {
         let resolved = false;
         connection.send(msg, function(resp, ok) {
             if (resolved) return; resolved = true;
+            let status = null, txt = '';
             try {
-                const status = resp.readSignedByte();
-                const txt = resp.readUtf16String ? resp.readUtf16String() : '';
-                resolve({success:ok, status:status, message:txt, balance:balance, dest:destId});
-            } catch(e) {
-                resolve({success:ok, error:e.toString(), balance:balance});
-            }
+                if (resp && typeof resp.readSignedByte === 'function') status = resp.readSignedByte();
+                else if (resp && typeof resp.readByte === 'function') status = resp.readByte();
+                if (resp && typeof resp.readUtf16String === 'function') txt = resp.readUtf16String();
+            } catch(e) { txt = ''; }
+            const good = (ok !== false) && (status === null || status === 0);
+            resolve({success:good, status:status, message:txt, balance:balance,
+                     dest:destId, error: good ? '' : (txt || ('status=' + status))});
         });
         setTimeout(() => { if (!resolved) { resolved = true;
             resolve({success:false, error:'timeout', balance:balance}); } }, 12000);
@@ -538,8 +541,51 @@ JS_CLICK_WATCH = """() => {
 # ============================================================
 # ACTIONS
 # ============================================================
+def transfer_all_xu_raw(s: GameSession, dest_id):
+    """Chuyển xu bằng LỆNH THÔ (raw WS): TRANSFER 0x013D + destId + amount.
+
+    Bỏ qua UI game (UI không hoạt động trong headless) — gửi thẳng frame nhị phân
+    lên socket game đã bắt, rồi đọc frame trả lời cùng cmd id.
+    """
+    if not ws_bridge:
+        return {"success": False, "error": "không có ws_bridge"}
+    if not s.ensure_ready("transfer"):
+        return {"success": False, "error": "session chưa sẵn sàng"}
+    bal = parse_balance_num(s.get_bal())
+    if bal <= 0:
+        return {"success": False, "error": "balance = 0", "balance": 0}
+    target = s.ws_target()
+    payload = ws_bridge.pack_long(dest_id) + ws_bridge.pack_long(bal)
+    resp = ws_bridge.send_raw_cmd(target, ws_bridge.CMD_TRANSFER, payload, timeout=15)
+    if not resp.get("ok"):
+        return {"success": False, "error": resp.get("error") or "raw transfer fail",
+                "balance": bal, "method": "raw"}
+    parsed = ws_bridge.parse_transfer(resp)
+    raw_hex = (resp.get("raw") or b"").hex()
+    out = {"success": bool(parsed.get("ok")),
+           "status": parsed.get("status"),
+           "message": parsed.get("message", ""),
+           "error": parsed.get("error", ""),
+           "balance": bal,
+           "method": "raw",
+           "raw": raw_hex}
+    if out["success"]:
+        # server có thể push balance mới — đồng bộ lại số hiển thị trên UI
+        new_bal = ws_bridge.wait_balance_push(target, resp.get("start", 0), timeout=3.0)
+        shown = 0 if new_bal is None else new_bal
+        s.eval("() => { const el = document.querySelector('.chipBalance');"
+               " if (el) el.textContent = '%d'; return true; }" % shown, retries=0)
+        out["new_balance"] = shown
+    return out
+
+
 def transfer_all_xu(s: GameSession, dest_id=TRANSFER_DEST_ID):
-    """Chuyển toàn bộ xu về dest_id. Raise SessionDead nếu session hỏng."""
+    """Chuyển toàn bộ xu về dest_id. Ưu tiên lệnh thô (RAW_CMD), fallback lệnh JS."""
+    if RAW_CMD:
+        r = transfer_all_xu_raw(s, dest_id)
+        if r.get("success"):
+            return r
+        log(f"  ⚠ raw transfer fail: {r.get('error', 'unknown')} — thử lệnh JS")
     if not s.ensure_ready("transfer"):
         return {"success": False, "error": "session chưa sẵn sàng"}
     res = s.eval(JS_TRANSFER, dest_id, default=None, retries=1)

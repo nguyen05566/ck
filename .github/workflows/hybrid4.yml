@@ -21,7 +21,7 @@ jobs:
 
     env:
       GROUP_BOTS: "ck34.py ck35.py ck36.py ck38.py ck41.py ck42.py ck43.py ck44.py ck45.py ck46.py"
-      TRANSFER_DEST_ID: '68859162'
+      TRANSFER_DEST_ID: '68859213'
 
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +51,7 @@ jobs:
           REST_BETWEEN_RUNS: '5'
           MAX_RUNTIME: '21000'
           TRANSFER_ENABLED: 'true'
+          RAW_CMD: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
           MAX_CLAIMS_PER_DAY: '120'
           MAX_TRANSFERS_PER_DAY: '20'
