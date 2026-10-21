@@ -316,15 +316,23 @@ class GameSession:
         return False
 
     # ---------- ws capture ----------
+    def ws_target(self):
+        # WebSocket của game nằm trong iframe instant-bundle -> phải evaluate trong frame đó
+        try:
+            f = self.frame()
+        except Exception:
+            f = None
+        return f or self.page
+
     def ws_capture(self, limit=0):
         if not ws_bridge:
             return []
-        return ws_bridge.capture_frames(self.page, limit=limit)
+        return ws_bridge.capture_frames(self.ws_target(), limit=limit)
 
     def ws_send(self, payload, sock_index=0):
         if not ws_bridge:
             return {"ok": False, "error": "no ws_bridge"}
-        return ws_bridge.send_raw(self.page, payload, sock_index)
+        return ws_bridge.send_raw(self.ws_target(), payload, sock_index)
 
     # ---------- health ----------
     def check_page_health(self):
@@ -605,6 +613,7 @@ def run_session(p, fb_cookies, session_id, started_at):
     context = None
     page = None
     profile_dir = None
+    s = None
     total_reward = 0
     total_transferred = 0
     ok = 0
@@ -926,10 +935,15 @@ def run_session(p, fb_cookies, session_id, started_at):
         try:
             if context:
                 try:
-                    if ws_bridge and page is not None:
-                        _frames = ws_bridge.capture_frames(page)
-                        _cmds = ws_bridge.capture_commands(page)
-                        log(f"  🔎 [WS] Bắt được {len(_frames)} frame / {len(_cmds)} lệnh")
+                    if ws_bridge and s is not None:
+                        _frames = s.ws_capture()
+                        _cmds = ws_bridge.capture_commands(s.ws_target())
+                        _names = [c.get("name") for c in _cmds if c.get("name")]
+                        log(f"  🔎 [WS] game frame: {len(_frames)} frame / {len(_cmds)} lệnh"
+                            + (f" | {', '.join(_names[:8])}" if _names else ""))
+                        _mf = ws_bridge.capture_frames(page)
+                        if _mf:
+                            log(f"  🔎 [WS] main frame: {len(_mf)} frame (FB gateway)")
                 except Exception:
                     pass
                 try:
