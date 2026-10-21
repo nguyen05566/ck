@@ -1,5 +1,4 @@
 name: d-mystery-xiangqi
-disabled: true
 
 on:
   workflow_dispatch:

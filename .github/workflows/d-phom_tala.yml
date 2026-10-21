@@ -1,5 +1,4 @@
 name: d-phom_tala
-disabled: true
 
 on:
   workflow_dispatch:

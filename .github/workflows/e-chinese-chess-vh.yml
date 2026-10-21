@@ -1,5 +1,4 @@
 name: e-chinese-chess-vh
-disabled: true
 
 on:
   workflow_dispatch:

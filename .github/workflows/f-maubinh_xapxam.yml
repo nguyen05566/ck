@@ -1,5 +1,4 @@
 name: f-maubinh_xapxam
-disabled: true
 
 on:
   workflow_dispatch:
