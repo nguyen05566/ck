@@ -13,6 +13,10 @@ FP_DIR        = os.environ.get("FP_DIR", os.path.join(_HERE, "fingerprints"))
 STATE_DIR     = os.environ.get("STATE_DIR", os.path.join(_HERE, "state"))
 DEST_FILE     = os.environ.get("TRANSFER_DEST_FILE", os.path.join(_HERE, "transfer_dests.json"))
 
+# Thời gian nghỉ sau mỗi đợt claim (giây) — tổng cả phần cuộn feed
+IDLE_WAIT_MIN = float(os.environ.get("IDLE_WAIT_MIN", "10"))
+IDLE_WAIT_MAX = float(os.environ.get("IDLE_WAIT_MAX", "30"))
+
 # =====================================================================
 # A) FINGERPRINT POOLS
 # =====================================================================
@@ -870,27 +874,31 @@ def stealth_launch_args(fp: dict = None) -> list:
 # H) HUMAN-LIKE IDLE — tạo "session nghỉ" ngắn giữa các batch
 # =====================================================================
 def maybe_idle_browse(page, max_claims_so_far: int, every: int = 60):
-    """Mỗi ~`every` claim (± jitter), giả lập người dùng nghỉ 30-90s (lướt FB feed).
+    """Mỗi ~`every` claim (± jitter), giả lập người dùng nghỉ 10-30s (lướt FB feed).
 
-    Tránh pattern "claim liên tục nhiều giờ không nghỉ" — server sẽ flag.
+    Tránh pattern "claim liên tiếp nhiều giờ không nghỉ" — server sẽ flag.
     Ngưỡng nghỉ jitter → không phải lúc nào cũng đúng % 60.
+    Tổng thời gian nghỉ (đã trừ phần cuộn feed) = IDLE_WAIT_MIN..IDLE_WAIT_MAX giây.
     """
     if max_claims_so_far <= 0:
         return
     every_now = max(10, every + random.randint(-10, 15))
     if max_claims_so_far % every_now != 0:
         return
-    wait = random.uniform(30, 90)
-    print(f"  😴 Đã claim {max_claims_so_far} lần — nghỉ {wait:.0f}s giả lập người dùng.",
+    total = random.uniform(IDLE_WAIT_MIN, IDLE_WAIT_MAX)
+    print(f"  😴 Đã claim {max_claims_so_far} lần — nghỉ {total:.0f}s giả lập người dùng.",
           flush=True)
-    # Optionally scroll để giống người lướt feed
+    # Optionally scroll để giống người lướt feed (ăn một phần thời gian nghỉ)
+    t0 = time.time()
     try:
         for _ in range(random.randint(1, 3)):
             page.mouse.wheel(0, random.randint(100, 400))
             time.sleep(random.uniform(0.8, 2.5))
     except Exception:
         pass
-    time.sleep(wait)
+    remain = total - (time.time() - t0)
+    if remain > 0:
+        time.sleep(remain)
 
 
 def warm_up_account(page, fb_url: str = "https://www.facebook.com/", max_s: int = 15):
