@@ -57,8 +57,8 @@ jobs:
           MAX_RUNTIME: '21000'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
-          MAX_CLAIMS_PER_DAY: '120'
-          MAX_TRANSFERS_PER_DAY: '20'
+          MAX_CLAIMS_PER_DAY: '0'
+          MAX_TRANSFERS_PER_DAY: '0'
           SESSION_START_JITTER: '180'
           IDLE_EVERY_CLAIMS: '40'
         run: |

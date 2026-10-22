@@ -541,9 +541,9 @@ def human_click(page, selector) -> bool:
 # =====================================================================
 # D) DAILY QUOTA / STATE
 # =====================================================================
-DEFAULT_MAX_CLAIMS_PER_DAY    = 180   # ~3 batch x 40 + buffer
-DEFAULT_MAX_TRANSFERS_PER_DAY = 30
-DEFAULT_MAX_TRANSFER_AMOUNT   = 2_000_000  # tổng xu transfer/ngày/cookie
+DEFAULT_MAX_CLAIMS_PER_DAY    = 0     # 0 = không giới hạn
+DEFAULT_MAX_TRANSFERS_PER_DAY = 0     # 0 = không giới hạn
+DEFAULT_MAX_TRANSFER_AMOUNT   = 2_000_000  # tổng xu transfer/ngày/cookie (0 = không giới hạn)
 
 _STATE_FILE = os.path.join(STATE_DIR, "daily_state.json")  # file gộp cũ — chỉ đọc để migrate
 
@@ -639,16 +639,19 @@ def check_daily_quota(cookie_file: str,
                       max_claims=DEFAULT_MAX_CLAIMS_PER_DAY,
                       max_transfers=DEFAULT_MAX_TRANSFERS_PER_DAY,
                       max_amount=DEFAULT_MAX_TRANSFER_AMOUNT) -> tuple:
-    """Trả về (ok, reason). ok=False nghĩa là đã vượt quota hôm nay."""
+    """Trả về (ok, reason). ok=False nghĩa là đã vượt quota hôm nay.
+
+    max_claims / max_transfers / max_amount <= 0 => KHÔNG giới hạn (bỏ qua check đó).
+    """
     st = load_daily_state(cookie_file)
     claims = int(st.get("claims_today", 0))
     transfers = int(st.get("transfers_today", 0))
     amount = int(st.get("amount_transferred", 0))
-    if claims >= max_claims:
+    if max_claims > 0 and claims >= max_claims:
         return False, f"đã claim {claims}/{max_claims} hôm nay"
-    if transfers >= max_transfers:
+    if max_transfers > 0 and transfers >= max_transfers:
         return False, f"đã transfer {transfers}/{max_transfers} lần hôm nay"
-    if amount >= max_amount:
+    if max_amount > 0 and amount >= max_amount:
         return False, f"đã transfer {amount:,}/{max_amount:,} xu hôm nay"
     ban_until = int(st.get("soft_ban_until", 0))
     if ban_until > time.time():
