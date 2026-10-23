@@ -479,15 +479,12 @@ JS_TRANSFER = """(destId) => new Promise((resolve) => {
         let resolved = false;
         connection.send(msg, function(resp, ok) {
             if (resolved) return; resolved = true;
-            let status = null, txt = '';
+            let txt = '';
             try {
-                if (resp && typeof resp.readSignedByte === 'function') status = resp.readSignedByte();
-                else if (resp && typeof resp.readByte === 'function') status = resp.readByte();
-                if (resp && typeof resp.readUtf16String === 'function') txt = resp.readUtf16String();
+                if (ok && resp && typeof resp.readString === 'function') txt = resp.readString();
             } catch(e) { txt = ''; }
-            const good = (ok !== false) && (status === null || status === 0);
-            resolve({success:good, status:status, message:txt, balance:balance,
-                     dest:destId, error: good ? '' : (txt || ('status=' + status))});
+            resolve({success: ok === true, status: ok === true ? 0 : -1, message:txt, balance:balance,
+                     dest:destId, error: ok === true ? '' : (txt || 'transfer rejected')});
         });
         setTimeout(() => { if (!resolved) { resolved = true;
             resolve({success:false, error:'timeout', balance:balance}); } }, 12000);
