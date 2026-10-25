@@ -54,7 +54,7 @@ jobs:
           LOG="/tmp/bot_logs/${name}.log"
           echo "[$(date '+%H:%M:%S')] Starting $BOT_SCRIPT on $(grep 'SINGLE_COOKIE_FILE' $BOT_SCRIPT | head -1)"
           START=$(date +%s)
-          SINGLE_COOKIE_FILE="" python3 "$BOT_SCRIPT" 2>&1 | tee "$LOG"
+          python3 "$BOT_SCRIPT" 2>&1 | tee "$LOG"
           EXIT=${PIPESTATUS[0]}
           DUR=$(( $(date +%s) - START ))
           echo "[$(date '+%H:%M:%S')] exit=$EXIT after ${DUR}s"
