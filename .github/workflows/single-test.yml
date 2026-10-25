@@ -61,17 +61,14 @@ jobs:
           LOG="/tmp/bot_logs/${name}.log"
 
           echo "=== Single Bot Test: $BOT_SCRIPT ==="
-          echo "Cookie file: $(python3 -c "
-import os
-os.environ.setdefault('SINGLE_COOKIE_FILE', '')
-" 2>/dev/null; grep 'SINGLE_COOKIE_FILE' /root/jieqi-core/${BOT_SCRIPT} | head -1)"
           echo "Transfer Dest: $TRANSFER_DEST_ID"
           echo "Max runtime: $MAX_RUNTIME seconds"
+          echo "Cookie file: $(grep 'SINGLE_COOKIE_FILE' $BOT_SCRIPT | head -1)"
 
           echo "[$(date '+%H:%M:%S')] Starting $BOT_SCRIPT"
           START=$(date +%s)
-          python3 "$BOT_SCRIPT" 2>&1 | tee "$LOG"
-          EXIT=$?
+          SINGLE_COOKIE_FILE="" python3 "$BOT_SCRIPT" 2>&1 | tee "$LOG"
+          EXIT=${PIPESTATUS[0]}
           DUR=$(( $(date +%s) - START ))
           echo "[$(date '+%H:%M:%S')] exit=$EXIT after ${DUR}s"
 
