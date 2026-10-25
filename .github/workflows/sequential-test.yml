@@ -1,0 +1,107 @@
+name: sequential-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      BOT_LIST:
+        description: "Comma-separated bot scripts (e.g. ck51.py,ck56.py)"
+        required: true
+        default: "ck51.py"
+      TRANSFER_DEST_ID:
+        description: "Transfer destination ID"
+        required: false
+        default: "71391343"
+      MAX_RUNTIME:
+        description: "Max runtime per bot (seconds)"
+        required: false
+        default: "3600"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  run-sequential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    concurrency:
+      group: sequential-run
+      cancel-in-progress: true
+
+    env:
+      TRANSFER_DEST_ID: ${{ github.event.inputs.TRANSFER_DEST_ID || '71391343' }}
+      BOT_LIST: ${{ github.event.inputs.BOT_LIST }}
+      MAX_RUNTIME: ${{ github.event.inputs.MAX_RUNTIME || '3600' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright websocket-client
+          playwright install chromium --with-deps
+
+      - name: Run bots sequentially (one at a time)
+        env:
+          HEADLESS: 'true'
+          COOLDOWN: '3'
+          REST_BETWEEN_RUNS: '5'
+          TRANSFER_ENABLED: 'true'
+          PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
+          SESSION_START_JITTER: '15'
+          MAX_CLAIMS_PER_DAY: '0'
+          MAX_TRANSFERS_PER_DAY: '0'
+        run: |
+          mkdir -p /tmp/bot_logs
+          
+          IFS=',' read -ra BOTS <<< "$BOT_LIST"
+          TOTAL=${#BOTS[@]}
+          
+          echo "=== Sequential Run ==="
+          echo "Total bots: $TOTAL"
+          echo "Transfer Dest: $TRANSFER_DEST_ID"
+          echo "Max runtime per bot: $MAX_RUNTIME seconds"
+          
+          COUNTER=0
+          for bot in "${BOTS[@]}"; do
+            bot=$(echo "$bot" | xargs)  # trim whitespace
+            name="${bot%.py}"
+            LOG="/tmp/bot_logs/${name}.log"
+            COUNTER=$((COUNTER + 1))
+            echo "[$(date '+%H:%M:%S')] Starting $bot ($COUNTER of $TOTAL)"
+            echo "Cookie: $(grep 'SINGLE_COOKIE_FILE' $bot | head -1)"
+            
+            START=$(date +%s)
+            python3 "$bot" 2>&1 | tee "$LOG"
+            EXIT=${PIPESTATUS[0]}
+            DUR=$(( $(date +%s) - START ))
+            echo "[$(date '+%H:%M:%S')] $bot exit=$EXIT after ${DUR}s"
+            
+            if [ $EXIT -ne 0 ]; then
+              echo "[$(date '+%H:%M:%S')] WARNING: $bot exited with code $EXIT"
+            fi
+            
+            echo "[$(date '+%H:%M:%S')] Sleeping 10s before next bot..."
+            sleep 10
+          done
+          
+          echo "=== All bots completed ==="
+          echo "=== Logs Summary ==="
+          for f in /tmp/bot_logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "--- $(basename $f) ---"
+            tail -5 "$f"
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sequential-logs
+          path: /tmp/bot_logs/
+          retention-days: 1
