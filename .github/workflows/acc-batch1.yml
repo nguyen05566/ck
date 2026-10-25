@@ -1,0 +1,115 @@
+name: acc-batch1
+
+on:
+  workflow_dispatch:
+    inputs:
+      TRANSFER_DEST_ID:
+        description: "Transfer destination ID"
+        required: false
+        default: "71391343"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    concurrency:
+      group: acc-batch1
+      cancel-in-progress: false
+
+    env:
+      TRANSFER_DEST_ID: ${{ github.event.inputs.TRANSFER_DEST_ID || '71391343' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright websocket-client
+          playwright install chromium --with-deps
+
+      - name: Print group info
+        run: |
+          echo "=== ACC Batch 1 ==="
+          echo "Bots (9): ck1.py ck2.py ck3.py ck4.py ck5.py ck6.py ck7.py ck8.py ck9.py"
+          echo "Cookies: acc1.txt acc2.txt acc3.txt acc4.txt acc5.txt acc6.txt acc7.txt acc8.txt acc9.txt"
+          echo "Transfer Dest: $TRANSFER_DEST_ID"
+
+      - name: Run bots with acc cookies
+        env:
+          MAX_CLAIMS: '40'
+          HEADLESS: 'true'
+          COOLDOWN: '3'
+          REST_BETWEEN_RUNS: '30'
+          MAX_RUNTIME: '19800'
+          TRANSFER_ENABLED: 'true'
+          PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
+          SESSION_START_JITTER: '180'
+        run: |
+          set +e
+          mkdir -p /tmp/bot_logs
+
+          run_acc_bot() {
+            local script="$1"
+            local cookie="$2"
+            local name="${script%.py}"
+            local LOG="/tmp/bot_logs/${name}.log"
+
+            (
+              END_TIME=$(( $(date +%s) + ${MAX_RUNTIME} ))
+              ATTEMPT=0
+              while [ $(date +%s) -lt $END_TIME ]; do
+                ATTEMPT=$(( ATTEMPT+1 ))
+                REMAIN=$(( END_TIME - $(date +%s) ))
+                echo "=== [$name] [$(date '+%H:%M:%S')] Attempt #$ATTEMPT — ${REMAIN}s left ==="
+                echo "=== [$name] Cookie: $cookie | Dest: ${TRANSFER_DEST_ID} ==="
+                START=$(date +%s)
+                SINGLE_COOKIE_FILE="$cookie" python3 "$script"
+                EXIT=$?
+                DUR=$(( $(date +%s) - START ))
+                echo "=== [$name] [$(date '+%H:%M:%S')] exit=$EXIT after ${DUR}s ==="
+                REMAIN=$(( END_TIME - $(date +%s) ))
+                if [ $REMAIN -le 30 ]; then
+                  echo "[$name] Time up — stopping retry loop."
+                  break
+                fi
+                echo "[$name] Sleeping 60s before retry..."
+                sleep 60
+              done
+            ) > "$LOG" 2>&1
+          }
+
+          run_acc_bot "ck1.py" "acc1.txt" &  sleep 8
+          run_acc_bot "ck2.py" "acc2.txt" &  sleep 8
+          run_acc_bot "ck3.py" "acc3.txt" &  sleep 8
+          run_acc_bot "ck4.py" "acc4.txt" &  sleep 8
+          run_acc_bot "ck5.py" "acc5.txt" &  sleep 8
+          run_acc_bot "ck6.py" "acc6.txt" &  sleep 8
+          run_acc_bot "ck7.py" "acc7.txt" &  sleep 8
+          run_acc_bot "ck8.py" "acc8.txt" &  sleep 8
+          run_acc_bot "ck9.py" "acc9.txt" &  sleep 8
+
+          echo "Waiting for all bots to finish..."
+          wait
+
+          echo "=== FINAL LOGS ==="
+          for f in /tmp/bot_logs/*.log; do
+            echo "--- $f ---"
+            tail -20 "$f"
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-logs-acc-batch1
+          path: /tmp/bot_logs/
+          retention-days: 3

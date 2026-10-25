@@ -1,0 +1,121 @@
+name: hybrid5
+
+on:
+  workflow_dispatch:
+    inputs:
+      TRANSFER_DEST_ID:
+        description: "Transfer destination ID"
+        required: false
+        default: "71391343"
+  schedule:
+    - cron: '0 1 * * *'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    concurrency:
+      group: hybrid5
+      cancel-in-progress: false
+
+    env:
+      GROUP_BOTS: "ck47.py ck48.py ck49.py ck50.py ck51.py ck52.py ck53.py ck54.py ck55.py ck56.py ck57.py ck58.py ck59.py ck60.py"
+      TRANSFER_DEST_ID: ${{ github.event.inputs.TRANSFER_DEST_ID || '71391343' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright websocket-client
+          playwright install chromium --with-deps
+
+      - name: Print group info
+        run: |
+          echo "=== Hybrid 5 ==="
+          echo "Bots (14): $GROUP_BOTS"
+          echo "Transfer Dest: $TRANSFER_DEST_ID"
+          echo "Runner: $(nproc) vCPU, $(free -g | awk '/^Mem/' | awk '{print $2}') GB RAM"
+
+      - name: Run bots in parallel
+        env:
+          MAX_CLAIMS: '40'
+          HEADLESS: 'true'
+          COOLDOWN: '3'
+          REST_BETWEEN_RUNS: '5'
+          MAX_RUNTIME: '21600'
+          TRANSFER_ENABLED: 'true'
+          PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
+          MAX_CLAIMS_PER_DAY: '0'
+          MAX_TRANSFERS_PER_DAY: '0'
+          SESSION_START_JITTER: '180'
+          IDLE_EVERY_CLAIMS: '40'
+        run: |
+          set +e
+          mkdir -p /tmp/bot_logs
+
+          run_bot() {
+            local bot="$1"
+            local name="${bot%.py}"
+            local LOG="/tmp/bot_logs/${name}.log"
+
+            (
+              END_TIME=$(( $(date +%s) + ${MAX_RUNTIME} ))
+              ATTEMPT=0
+              while [ $(date +%s) -lt $END_TIME ]; do
+                ATTEMPT=$(( ATTEMPT+1 ))
+                REMAIN=$(( END_TIME - $(date +%s) ))
+                echo "=== [$name] [$(date '+%H:%M:%S')] Attempt #$ATTEMPT — ${REMAIN}s left ==="
+                echo "=== [$name] Transfer Dest: ${TRANSFER_DEST_ID} ==="
+                START=$(date +%s)
+                python3 "$bot"
+                EXIT=$?
+                DUR=$(( $(date +%s) - START ))
+                echo "=== [$name] [$(date '+%H:%M:%S')] exit=$EXIT after ${DUR}s ==="
+                REMAIN=$(( END_TIME - $(date +%s) ))
+                if [ $REMAIN -le 30 ]; then
+                  echo "[$name] Time up — stopping retry loop."
+                  break
+                fi
+                echo "[$name] Sleeping 60s before retry..."
+                sleep 60
+              done
+            ) > "$LOG" 2>&1
+          }
+
+          PIDS=()
+          for bot in $GROUP_BOTS; do
+            name="${bot%.py}"
+            echo "[$(date '+%H:%M:%S')] Starting $bot -> /tmp/bot_logs/${name}.log (dest: ${TRANSFER_DEST_ID})"
+            run_bot "$bot" &
+            PIDS+=($!)
+            sleep 15
+          done
+
+          echo "Waiting for all bots to finish..."
+          for PID in "${PIDS[@]}"; do
+            wait $PID
+          done
+
+          echo "=== FINAL LOGS ==="
+          for f in /tmp/bot_logs/*.log; do
+            echo "--- $f ---"
+            tail -20 "$f"
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-logs-hybrid5
+          path: /tmp/bot_logs/
+          retention-days: 3
