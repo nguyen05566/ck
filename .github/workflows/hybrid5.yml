@@ -46,13 +46,13 @@ jobs:
           echo "Transfer Dest: $TRANSFER_DEST_ID"
           echo "Runner: $(nproc) vCPU, $(free -g | awk '/^Mem/' | awk '{print $2}') GB RAM"
 
-      - name: Run bots in parallel
+      - name: Run bots sequentially (one at a time)
         env:
           MAX_CLAIMS: '40'
           HEADLESS: 'true'
           COOLDOWN: '3'
           REST_BETWEEN_RUNS: '5'
-          MAX_RUNTIME: '21600'
+          MAX_RUNTIME: '3600'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
           MAX_CLAIMS_PER_DAY: '0'
@@ -92,18 +92,12 @@ jobs:
             ) > "$LOG" 2>&1
           }
 
-          PIDS=()
           for bot in $GROUP_BOTS; do
             name="${bot%.py}"
             echo "[$(date '+%H:%M:%S')] Starting $bot -> /tmp/bot_logs/${name}.log (dest: ${TRANSFER_DEST_ID})"
-            run_bot "$bot" &
-            PIDS+=($!)
+            run_bot "$bot"
+            echo "[$(date '+%H:%M:%S')] $bot done. Next bot in 15s..."
             sleep 15
-          done
-
-          echo "Waiting for all bots to finish..."
-          for PID in "${PIDS[@]}"; do
-            wait $PID
           done
 
           echo "=== FINAL LOGS ==="
