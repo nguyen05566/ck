@@ -43,13 +43,13 @@ jobs:
           echo "Cookies: acc1.txt acc2.txt acc3.txt acc4.txt acc5.txt acc6.txt acc7.txt acc8.txt acc9.txt"
           echo "Transfer Dest: $TRANSFER_DEST_ID"
 
-      - name: Run bots with acc cookies
+      - name: Run bots sequentially (one at a time)
         env:
           MAX_CLAIMS: '40'
           HEADLESS: 'true'
           COOLDOWN: '3'
           REST_BETWEEN_RUNS: '30'
-          MAX_RUNTIME: '19800'
+          MAX_RUNTIME: '3600'
           TRANSFER_ENABLED: 'true'
           PRE_CLAIM_TRANSFER_THRESHOLD: '50000'
           SESSION_START_JITTER: '180'
@@ -87,18 +87,39 @@ jobs:
             ) > "$LOG" 2>&1
           }
 
-          run_acc_bot "ck1.py" "acc1.txt" &  sleep 8
-          run_acc_bot "ck2.py" "acc2.txt" &  sleep 8
-          run_acc_bot "ck3.py" "acc3.txt" &  sleep 8
-          run_acc_bot "ck4.py" "acc4.txt" &  sleep 8
-          run_acc_bot "ck5.py" "acc5.txt" &  sleep 8
-          run_acc_bot "ck6.py" "acc6.txt" &  sleep 8
-          run_acc_bot "ck7.py" "acc7.txt" &  sleep 8
-          run_acc_bot "ck8.py" "acc8.txt" &  sleep 8
-          run_acc_bot "ck9.py" "acc9.txt" &  sleep 8
+          run_acc_bot "ck1.py" "acc1.txt"
+          echo "[$(date '+%H:%M:%S')] ck1 done. Next bot in 15s..."
+          sleep 15
 
-          echo "Waiting for all bots to finish..."
-          wait
+          run_acc_bot "ck2.py" "acc2.txt"
+          echo "[$(date '+%H:%M:%S')] ck2 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck3.py" "acc3.txt"
+          echo "[$(date '+%H:%M:%S')] ck3 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck4.py" "acc4.txt"
+          echo "[$(date '+%H:%M:%S')] ck4 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck5.py" "acc5.txt"
+          echo "[$(date '+%H:%M:%S')] ck5 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck6.py" "acc6.txt"
+          echo "[$(date '+%H:%M:%S')] ck6 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck7.py" "acc7.txt"
+          echo "[$(date '+%H:%M:%S')] ck7 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck8.py" "acc8.txt"
+          echo "[$(date '+%H:%M:%S')] ck8 done. Next bot in 15s..."
+          sleep 15
+
+          run_acc_bot "ck9.py" "acc9.txt"
 
           echo "=== FINAL LOGS ==="
           for f in /tmp/bot_logs/*.log; do
