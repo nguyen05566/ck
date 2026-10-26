@@ -52,7 +52,7 @@ REST          = int(os.environ.get("REST_BETWEEN_RUNS", "30"))    # nghỉ giữ
 MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
 HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
 
-TRANSFER_DEST_ID = int(os.environ.get("TRANSFER_DEST_ID", "51977054"))
+TRANSFER_DEST_ID = int(os.environ.get("TRANSFER_DEST_ID", "68952059"))
 TRANSFER_ENABLED = os.environ.get("TRANSFER_ENABLED", "true").lower() == "true"
 PRE_CLAIM_TRANSFER_THRESHOLD = int(os.environ.get("PRE_CLAIM_TRANSFER_THRESHOLD", "10000"))
 

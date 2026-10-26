@@ -4,7 +4,7 @@ ws_probe.py — Bắt WebSocket của game để phân tích protocol (mẫu are
 
 Cách dùng:
     python3 ws_probe.py --cookie ck1.txt --game tienlen_miennam --seconds 60
-    python3 ws_probe.py --cookie ck1.txt --game tienlen_miennam --claim 3 --transfer 51977054
+    python3 ws_probe.py --cookie ck1.txt --game tienlen_miennam --claim 3 --transfer 68952059
 
 Kết quả lưu vào ws_out/:
     ws_frames.json  - toàn bộ frame gửi/nhận (nhị phân -> base64) + tên lệnh

@@ -793,7 +793,7 @@ def detect_soft_ban(text: str) -> bool:
 # =====================================================================
 # F) TRANSFER DESTINATION ROTATION
 # =====================================================================
-def load_transfer_dests(default_id: int = 51977054) -> list:
+def load_transfer_dests(default_id: int = 68952059) -> list:
     """Load danh sách dest_id từ transfer_dests.json. Fallback [default_id] nếu lỗi.
 
     Mỗi phần tử convert riêng: 1 entry hỏng không làm mất các dest còn lại."""
@@ -816,7 +816,7 @@ def load_transfer_dests(default_id: int = 51977054) -> list:
         return [default_id]
 
 
-def pick_next_dest(cookie_file: str, default_id: int = 51977054) -> int:
+def pick_next_dest(cookie_file: str, default_id: int = 68952059) -> int:
     """Xoay vòng dest_id per-cookie: cookie N luôn đi về dest[N % len(dests)].
 
     Nếu nhiều nick cùng transfer về 1 dest thì đó là hub-and-spoke pattern
