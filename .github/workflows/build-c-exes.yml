@@ -1,0 +1,32 @@
+name: build-c-exes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        script:
+          - c-chinese-chess-vh.py
+          - c-gomoku-vh.py
+          - c-maubinh_xapxam.py
+          - c-mystery-xiangqi.py
+          - c-phom_tala.py
+          - c-sam_loc_vh.py
+          - c-tienlen_miennam.py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install build deps
+        run: pip install pyinstaller playwright websocket-client psutil requests
+      - name: Build exe
+        run: pyinstaller --onefile --name ${{ matrix.script }} ${{ matrix.script }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.script }}-exe
+          path: dist/${{ matrix.script }}.exe

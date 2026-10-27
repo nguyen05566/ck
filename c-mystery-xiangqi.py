@@ -53,10 +53,17 @@ MAX_RUNTIME   = int(os.environ.get("MAX_RUNTIME", str(330 * 60)))
 HEADLESS      = os.environ.get("HEADLESS", "true").lower() == "true"
 
 TRANSFER_DEST_ID = int(os.environ.get("TRANSFER_DEST_ID", "68952059"))
-TRANSFER_ENABLED = os.environ.get("TRANSFER_ENABLED", "true").lower() == "true"
+TRANSFER_ENABLED = False  # claim only, transfer disabled
 PRE_CLAIM_TRANSFER_THRESHOLD = int(os.environ.get("PRE_CLAIM_TRANSFER_THRESHOLD", "10000"))
 
-SINGLE_COOKIE_FILE = os.environ.get("SINGLE_COOKIE_FILE", "c.txt").strip()
+_env_cookie = os.environ.get("SINGLE_COOKIE_FILE")
+if _env_cookie:
+    SINGLE_COOKIE_FILE = _env_cookie.strip()
+else:
+    try:
+        SINGLE_COOKIE_FILE = input("Nhap file cookie (vd: c.txt): ").strip() or "c.txt"
+    except EOFError:
+        SINGLE_COOKIE_FILE = "c.txt"
 
 # ---- Chống loop vô hạn ----
 MAX_SESSIONS            = int(os.environ.get("MAX_SESSIONS", "12"))          # số lần mở lại browser
