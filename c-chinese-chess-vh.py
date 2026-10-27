@@ -61,9 +61,15 @@ if _env_cookie:
     SINGLE_COOKIE_FILE = _env_cookie.strip()
 else:
     try:
-        SINGLE_COOKIE_FILE = input("Nhap file cookie (vd: c.txt): ").strip() or "c.txt"
+        raw = input("Dán cookie HOẶC nhập tên file cookie: ").strip()
     except EOFError:
-        SINGLE_COOKIE_FILE = "c.txt"
+        raw = ""
+    if raw and ("=" in raw or ";" in raw):
+        with open("cookie_input.txt", "w", encoding="utf-8") as fh:
+            fh.write(raw)
+        SINGLE_COOKIE_FILE = "cookie_input.txt"
+    else:
+        SINGLE_COOKIE_FILE = raw or "c.txt"
 
 # ---- Chống loop vô hạn ----
 MAX_SESSIONS            = int(os.environ.get("MAX_SESSIONS", "12"))          # số lần mở lại browser
